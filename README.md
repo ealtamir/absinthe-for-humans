@@ -13,6 +13,4 @@ Installation
 Usage
 ------------
 
-  As the HTTP port is below 1234, Absinthe has to be run with root-priviliges.
-
-asd
+    As the HTTP port is below 1234, Absinthe has to be run with root-priviliges.
