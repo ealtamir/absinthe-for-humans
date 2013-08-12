@@ -1,7 +1,7 @@
 Absinthe
 ========
 
-Ἀψίνθιον. A highly integrated, advanced and cluster-ready server.
+Ἀψίνθιον. A highly integrated, advanced, extensible and cluster-ready server.
 
 *Absinthe* is a pure and beautiful boilerplate to kickstart web-app development. *Absinthe* is released under non-restrictive conditions and is extremely extensible. It is an abstraction of some of our core technologies and may be considered mature. It sports in-flight compression (gzip, deflate), stream caching and a hilarious performance.
 
