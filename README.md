@@ -22,6 +22,8 @@ We've included an example *controller* and an example *logic*. If you fire up th
 
 ![Structure](https://s3.amazonaws.com/f.cl.ly/items/033w101I102c353U3y3R/Untitled-1.png)
 
-When you fire up *Absinthe*, it searches for both controllers under `/controllers` and logic under `/logic`.
+When you fire up *Absinthe*, it searches for both controllers under `/controllers` and logic under `/logic`. Logics can arbitrarily export any kind and type of data and functions. The same applies to controllers with the exception that they have to export both a `paths` map (an array) which includes all paths (e.g. /start, /messages et al.) to which the controller applies to. Every controller exports a `handler` function which is called with the servers `request` and `response`; the third parameter is a sugar for request.url`.
+
+You can talk to any controller or logic with `controller.*` and `logic.*`, whereas the filename specifies the name under which an extension is registered internally. (e.g. `start.js will be namespaced as `controller.start.*`)
 
 **チャレンジして失敗ことを恐れるよりも、何もしないことを恐れろ。**
