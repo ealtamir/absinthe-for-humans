@@ -17,5 +17,5 @@
 exports.name = "util";
 
 exports.HelloWorld = function ( w, a, t ) {
-        return "Hello World";
+        return "Hello World!";
 };
