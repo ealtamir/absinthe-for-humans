@@ -104,18 +104,21 @@
         var port = parseInt(process.argv[2] || 80);
  
         _str = require("stream").Stream;
-        require("util").inherits(MemCache, _str);
 
-        function MemCache() {
+        var MemCache = function () {
                 _str.call(this);
                 this.readable = this.writable = !0;
                 this._buffers = [];
                 this._dests = []; this._ended = !1
-        }
+        };
+
+        require("util").inherits(MemCache, _str);
+
         MemCache.prototype.write = function (a) {
                 this._buffers.push(a);
                 this._dests.forEach(function (b) { b.write(a) })
         };
+
         MemCache.prototype.pipe = function (a, b) {
                 if (b) return false;
                 this._buffers.forEach(function (b) { a.write(b) });
@@ -123,9 +126,11 @@
                 this._dests.push(a);
                 return a
         };
+
         MemCache.prototype.getLength = function () {
                 return this._buffers.reduce(function (a, b) { return a + b.length }, 0)
         };
+
         MemCache.prototype.end = function () {
                 this._dests.forEach(function (a) { a.end() });
                 this._ended = !0; this._dests = []
@@ -205,7 +210,6 @@ readDictionary("./static", 2, function (_fm) {
         fs._createReadStream = fs.createReadStream;
 
         fs.createReadStream = function (a, b) {
-                return fs._createReadStream.apply(this, arguments);
                 void 0 == b && (b = {})
 
                 // whereas a is fd_ref && b is typeof object
