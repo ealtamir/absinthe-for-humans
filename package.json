@@ -3,8 +3,8 @@
       "version": "1.0.1",
       "author": "Legify UG",
       "description": "Ἀψίνθιον — A highly integrated, advanced and cluster-ready server.",
-      "contributors": [ 
-            { "name": "Kenan Sulayman", "email": "kenan@sly.mn" } 
+      "contributors": [
+            { "name": "Kenan Sulayman", "email": "kenan@sly.mn" }
       ],
       "bin": {
             "legify": "./app.js"
@@ -18,6 +18,8 @@
             "url": "https://github.com/Legify/Absinthe.git"
       },
       "dependencies": {
-            "mime": "*"
-      }
+            "mime": "*",
+            "spdy": "*"
+      },
+      "jshintConfig": ".jshintrc"
 }
