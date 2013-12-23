@@ -72,24 +72,6 @@ var _hr_mutate = function(init) {
 var cluster = require('cluster');
 var numCPUs = doCluster ? require('os').cpus().length : 1;
 
-//var childProcess= null,
-//    crypto      = null,
-//    fs          = null,
-//    http        = null,
-//    https       = null,
-//    mime        = null,
-//    _path       = null,
-//    repl        = null,
-//    spdy        = null,
-//    url         = null,
-//    util        = null,
-//    zlib        = null,
-//    config      = null,
-//    controller  = null,
-//    logic       = null,
-//    _ = null, __ = null,
-//    v8          = null;
-
 var worker = function() {
 
   // General purpose variable.
@@ -111,7 +93,14 @@ var worker = function() {
   util          = require('util');
   zlib          = require('zlib');
 
-  try {delete e;e;}catch(e){v8=e.stack!=void 0}finally{v8=v8||0}
+  try {
+    delete e;
+    e;
+  } catch(e) {
+    v8 = e.stack != void(0);
+  } finally {
+    v8 = v8 || 0;
+  }
 
   // Refer to https://gist.github.com/KenanSulayman/5281658.
   var _require = require;
@@ -255,6 +244,7 @@ var worker = function() {
     this._dests = [];
   };
 
+
   /*
       PRIMARY
 
@@ -275,7 +265,7 @@ var worker = function() {
 
     // Callback gets status, files found and number of files.
     readDir = function(start, callback) {
-      fs.lstat(path, function(err, stat) {
+      fs.lstat(start, function(err, stat) {
         if (err) { return callback(err); }
 
         var found = {
@@ -323,225 +313,226 @@ var worker = function() {
           });
         }
       });
+    };
 
-      return readDir(start, function(a, b, c) {
-        if (!(ctype ^ 3)) { return callback(b, c); }
-        if (ctype & 1)    { return callback(b); }
-        if (ctype & 2)    { return callback(c); }
+    return readDir(start, function(a, b, c) {
+      if (!(ctype ^ 3)) { return callback(b, c); }
+      if (ctype & 1)    { return callback(b); }
+      if (ctype & 2)    { return callback(c); }
+    });
+  };
+
+  readDictionary('./static', 2, function (_fm) {
+    var _fs               = {},
+        _fs_cache         = {},
+        _fs_cache_deflate = {},
+        _fs_cache_gzip    = {};
+
+    fs._createReadStream = fs.createReadStream;
+
+    fs.createReadStream = function(path, options) {
+      options = options || {};
+
+      // whereas path is fd_ref && options is typeof object
+      // __ if path, options do not statisfy (String path, Object options)
+      // forward to base implementation.
+      if (typeof path === 'string' && typeof options === 'object') {
+        return fs._createReadStream.apply(this, arguments);
+      }
+
+      if (_fs_cache[path]) { return _fs_cache[path]; }
+
+      _fs_cache[path] = new MemCache();
+
+      // Sends contents of file at 'path' to a buffer
+      fs._createReadStream(path, options).pipe(_fs_cache[path]);
+      return _fs_cache[path];
+    };
+
+    var err = _path.join(__dirname, 'lib/error/404.html');
+
+    var cancel = function(response) {
+      response.writeHead(404, {
+          'Content-Type': 'text/html'
+      });
+      return fs.createReadStream(err).pipe(response);
+    };
+
+    var ucache = {};
+    // Checks if path exists and decides which file to serve.
+    var sanitize = function (uri, callback) {
+      if (ucache[uri]) { return callback.apply(this, ucache[uri]); }
+
+      var resvd = _path.join(process.cwd(), '/static', uri);
+
+      fs.stat(resvd, function (err, stat) {
+        if (err) {
+          console.log('Error inside sanitize function.');
+          console.dir(err);
+          return callback(uri, resvd);
+        }
+
+        var isDirectory     = stat.isDirectory(),
+            forceDelegation = uri.substr(-1) !== '/';
+
+        // TODO: If path is a directory, what do you serve?
+        if (isDirectory) {
+          forceDelegation ? (uri += '/') : (uri += 'index.html');
+        }
+
+        ucache[uri] = [
+          uri,
+          _path.join(process.cwd(), '/static', uri),
+          isDirectory && forceDelegation
+        ];
+
+
+        return callback.apply(this, ucache[uri]);
       });
     };
 
-    readDictionary('./static', 2, function (_fm) {
-      var _fs               = {},
-          _fs_cache         = {},
-          _fs_cache_deflate = {},
-          _fs_cache_gzip    = {};
+    spdy.createServer({
+        ca: fs.readFileSync('./lib/tls/server.csr'),
+        key: fs.readFileSync('./lib/tls/server.key'),
+        cert: fs.readFileSync('./lib/tls/server.crt')
+    }, function (request, response) {
+      var parsed  = url.parse(request.url),
+          uri     = parsed.pathname,
+          temp    = null;
 
-      fs._createReadStream = fs.createReadStream;
+      request._params = {};
 
-      fs.createReadStream = function(path, options) {
-        options = options || {};
-
-        // whereas path is fd_ref && options is typeof object
-        // __ if path, options do not statisfy (String path, Object options)
-        // forward to base implementation.
-        if (typeof path === 'string' && typeof options === 'object') {
-          return fs._createReadStream.apply(this, arguments);
-        }
-
-        if (_fs_cache[path]) { return _fs_cache[path]; }
-
-        _fs_cache[path] = new MemCache();
-
-        // Sends contents of file at 'path' to a buffer
-        fs._createReadStream(path, options).pipe(_fs_cache[path]);
-        return _fs_cache[path];
-      };
-
-      var err = _path.join(__dirname, 'lib/error/404.html');
-
-      var cancel = function(response) {
-        response.writeHead(404, {
-            'Content-Type': 'text/html'
+      // Parse and format url params.
+      if (parsed.query) {
+        parsed.query.split('&').forEach(function(param) {
+          temp = param.split('=');
+          request._params[temp[0]] =
+            decodeURIComponent(temp[1]).replace(/\+/g, ' ');
         });
-        return fs.createReadStream(err).pipe(response);
-      };
+      }
 
-      var ucache = {};
+      sanitize(uri, function(uri, fn_, forceDelegation) {
+        response._writeHead = response.writeHead;
+        response.writeHead = function (statusCode, headers) {
+          headers = headers || {};
 
-      // Checks if path exists and decides which file to serve.
-      var sanitize = function (uri, callback) {
-        if (ucache[uri]) { return callback.apply(this, ucache[uri]); }
+          headers.libAbsinthe = 'r' + ABSINTHE.version;
 
-        var resvd = _path.join(process.cwd(), '/static', uri);
+          return response._writeHead.apply(this, [statusCode, headers]);
+        };
 
-        fs.stat(resvd, function (err, stat) {
-          if (err) { return callback(uri, resvd); }
-
-          var isDirectory     = stat.isDirectory(),
-              forceDelegation = uri.substr(-1) !== '/';
-
-          // TODO: If path is a directory, what do you serve?
-          if (isDirectory) {
-            forceDelegation ? (uri += '/') : (uri += 'index.html');
-          }
-
-          ucache[uri] = [
-            uri,
-            _path.join(process.cwd(), '/static', uri),
-            isDirectory && forceDelegation
-          ];
-
-          return callback.apply(this, ucache[uri]);
-        });
-      };
-
-      spdy.createServer({
-          ca: fs.readFileSync('./lib/tls/server.csr'),
-          key: fs.readFileSync('./lib/tls/server.key'),
-          cert: fs.readFileSync('./lib/tls/server.crt')
-      }, function (request, response) {
-        var parsed  = url.parse(request.url),
-            uri     = parsed.pathname,
-            temp    = null;
-
-        request._params = {};
-
-        // Parse and format url params.
-        if (parsed.query) {
-          parsed.query.split('&').forEach(function(param) {
-            temp = param.split('=');
-            request._params[temp[0]] =
-              decodeURIComponent(temp[1]).replace(/\+/g, ' ');
+        if (forceDelegation) {
+          response.writeHead(307, {
+              'Location': uri
           });
+          return response.end();
         }
 
-        sanitize(uri, function(uri, fn_, forceDelegation) {
-          response._writeHead = response.writeHead;
-          response.writeHead = function (statusCode, headers) {
-            headers = headers || {};
+        // SECURITY: Cancel request if tries to access dirs
+        // outside the project dir.
+        if ( /\.\.\/\.\./.test(uri) || /\.\/\.\./.test(uri) ) {
+          return cancel(response);
+        }
+        if ( fn_.length < (process.cwd()).length ) {
+          return cancel(response);
+        }
+        if ( ~uri.indexOf('/../') ) {
+          return cancel(response);
+        }
 
-            headers.libAbsinthe = 'r' + ABSINTHE.version;
+        // ROUTER
+        for (var router in controller) {
+            // Why does route have no 'var'?
+          for (var route in controller[router].paths) {
+            temp = controller[router].paths[route]; // path name
+            if ((uri.substr(0, temp.length) === temp && (uri.substr(temp.length, 1) == '/')) || uri === temp) {
+              return controller[router].handler.apply(this, [
+                request,
+                response,
+                controller[router].paths[route],
+                uri
+              ]);
+            }
+          }
+        }
 
-            return response._writeHead.apply(this, [statusCode, headers]);
-          };
+        // BLACKLIST
+        rpaths = config.blacklist;
 
-          if (forceDelegation) {
-            response.writeHead(307, {
-                'Location': uri
+        for (var rpath in rpaths) {
+          if (uri.substr(0, rpaths[rpath].length) === rpaths[rpath]) {
+            response.writeHead(418, {
+              'Content-Type': 'text/plain'
             });
-            return response.end();
+            return response.end('418 I\'m a teapot\n');
+          }
+        }
+
+        if (_fs[fn_] === void(0)) { _fs[fn_] = fs.existsSync(fn_); }
+
+        if (!_fs[fn_]) { return cancel(response); }
+
+        var s       = fs.createReadStream(fn_),
+            etag    = _fm['static' + uri] && _fm['static' + uri].mtime || '0',
+            ntag    = +etag;
+
+
+        if (request.headers['if-none-match'] === ntag) {
+          return response.end(response.writeHead(304, {
+            'Date': etag.toString(),
+            'Etag': ntag,
+            'Cache-Control': 'max-age=86400, public',
+            'Content-type': 'image/jpeg',
+            'Keep-Alive': 'timeout=6, max=32',
+            'Connection': 'keep-alive'
+          }));
+        }
+
+        var aE        = request.headers['accept-encoding'] || '',
+            _resHead  = {
+              'Content-Type': mime.lookup(fn_),
+              'Cache-control': 'max-age=604800',
+              'Expire': new Date().toString(),
+              'Etag': ntag
+            };
+
+        var compress = function(name, obj, cache) {
+          _resHead['Content-Encoding'] = name;
+          response.writeHead(200, _resHead);
+
+          if (cache[fn_]) {
+            return cache[fn_].pipe(response);
           }
 
-          // SECURITY: Cancel request if tries to access dirs
-          // outside the project dir.
-          if ( /\.\.\/\.\./.test(uri) || /\.\/\.\./.test(uri) ) {
-            return cancel(response);
-          }
-          if ( fn_.length < (process.cwd()).length ) {
-            return cancel(response);
-          }
-          if ( ~uri.indexOf('/../') ) {
-            return cancel(response);
-          }
+          cache[fn_] = new MemCache();
+          s.pipe(obj).pipe(cache[fn_]);
+          return cache[fn_].pipe(response);
+        };
 
-          // ROUTER
-          for (var router in controller) {
-              // Why does route have no 'var'?
-            for (var route in controller[router].paths) {
-              temp = controller[router].paths[route]; // path name
-              if ((uri.substr(0, temp.length) === temp && (uri.substr(temp.length, 1) == '/')) || uri === temp) {
-                return controller[router].handler.apply(this, [
-                  request,
-                  response,
-                  controller[router].paths[route],
-                  uri
-                ]);
-              }
-            }
-          }
+        if (~aE.indexOf('deflate')) {
+          return compress('deflate', zlib.createDeflate(), _fs_cache_deflate);
 
-          // BLACKLIST
-          rpaths = config.blacklist;
+        } else if (~aE.indexOf('gzip')) {
+          return compress('gzip', zlib.createGzip(), _fs_cache_gzip);
 
-          for (var rpath in rpaths) {
-            if (uri.substr(0, rpaths[rpath].length) === rpaths[rpath]) {
-              response.writeHead(418, {
-                'Content-Type': 'text/plain'
-              });
-              return response.end('418 I\'m a teapot\n');
-            }
-          }
+        } else {
+          response.writeHead(200, _resHead);
+          return s.pipe(response);
+        }
 
-          if (_fs[fn_] === void(0)) { _fs[fn_] = fs.existsSync(fn_); }
+      });
+    }).listen(DEFAULT_PORT);
 
-          if (!_fs[fn_]) { return cancel(response); }
+    http.createServer(function (request, response) {
+      if (!request.headers.host) { response.end(); }
 
-          var s       = fs.createReadStream(fn_),
-              etag    = _fm['static' + uri] && _fm['static' + uri].mtime || '0',
-              ntag    = +etag;
+      return response.writeHead(302, {
+              'Location': 'https://sly.mn' + request.url
+      }), response.end();
+    }).listen(HTTP_DEFAULT_P);
 
-          if (request.headers['if-none-match'] === ntag) {
-            return response.end(response.writeHead(304, {
-              'Date': etag.toString(),
-              'Etag': ntag,
-              'Cache-Control': 'max-age=86400, public',
-              'Content-type': 'image/jpeg',
-              'Keep-Alive': 'timeout=6, max=32',
-              'Connection': 'keep-alive'
-            }));
-          }
-
-          var aE        = request.headers['accept-encoding'] || '',
-              _resHead  = {
-                'Content-Type': mime.lookup(fn_),
-                'Cache-control': 'max-age=604800',
-                'Expire': new Date().toString(),
-                'Etag': ntag
-              };
-
-          if (~aE.indexOf('deflate')) {
-            _resHead['Content-Encoding'] = 'deflate';
-            response.writeHead(200, _resHead);
-
-            if (_fs_cache_deflate[fn_]) {
-              return _fs_cache_deflate[fn_].pipe(response);
-            }
-
-            _fs_cache_deflate[fn_] = new MemCache();
-            s.pipe(zlib.createDeflate()).pipe(_fs_cache_deflate[fn_]);
-            return _fs_cache_deflate[fn_].pipe(response);
-          }
-          else if (~aE.indexOf('gzip')) {
-            _resHead['Content-Encoding'] = 'gzip';
-            response.writeHead(200, _resHead);
-
-            if (_fs_cache_gzip[fn_]) {
-              return _fs_cache_gzip[fn_].pipe(response);
-            }
-
-            _fs_cache_gzip[fn_] = new MemCache();
-            s.pipe(zlib.createGzip()).pipe(_fs_cache_gzip[fn_]);
-            return _fs_cache_gzip[fn_].pipe(response);
-          }
-          else {
-            response.writeHead(200, _resHead);
-            return s.pipe(response);
-          }
-        });
-      }).listen(DEFAULT_PORT);
-
-      http.createServer(function (request, response) {
-        if (!request.headers.host) { response.end(); }
-
-        return response.writeHead(302, {
-                'Location': 'https://sly.mn' + request.url
-        }), response.end();
-      }).listen(HTTP_DEFAULT_P);
-
-      console.log('[' + process.pid + '] Ready.');
-    });
-  };
+    console.log('[' + process.pid + '] Ready.');
+  });
 };
 
 if (!cluster.isMaster) {
