@@ -1,3 +1,4 @@
+/* global logic */
 
 exports.name = 'index';
 exports.paths = [
@@ -5,9 +6,9 @@ exports.paths = [
 ];
 
 exports.handler = function(req, res, uri) {
-    'use strict';
+  'use strict';
 
-    if (uri === '/' || uri === '') {
-        return res.end('Yoooo');
-    }
+  if (uri === '/' || uri === '') {
+    logic.template.compile('index', res, {});
+  }
 };

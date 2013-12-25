@@ -18,9 +18,9 @@
             "url": "https://github.com/Legify/Absinthe.git"
       },
       "dependencies": {
-            "mime"          : "*",
-            "spdy"          : "*",
-            "handlebars"   : "*"
+            "mime"  : "*",
+            "spdy"  : "*",
+            "jade"   : "*"
       },
       "jshintConfig": ".jshintrc"
 }

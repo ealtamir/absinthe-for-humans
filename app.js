@@ -19,6 +19,8 @@ var doCluster = false;
 // Node won't display your
 // controllers if you're
 // clustering Absinthe.
+//
+var SERVE_INDEX = false;
 
 /*
          __                            ___
@@ -110,7 +112,7 @@ var worker = function() {
       return _require(k);
     } catch (e) {
       if (v8) {
-        _ = e.stack.split('\n'); // It is not clear what e.stack is.
+        _ = e.stack.split('\n'); // TODO: It is not clear what e.stack is.
         __ = '';
         for (var a in _) {
           if (_.hasOwnProperty(a)) {
@@ -373,11 +375,16 @@ var worker = function() {
         }
 
         var isDirectory     = stat.isDirectory(),
+            // when path is '/' serves index.html
             forceDelegation = uri.substr(-1) !== '/';
 
         // TODO: If path is a directory, what do you serve?
         if (isDirectory) {
-          forceDelegation ? (uri += '/') : (uri += 'index.html');
+          if (forceDelegation) {
+            uri += '/';
+          } else {
+            uri += SERVE_INDEX ? 'index.html': '';
+          }
         }
 
         ucache[uri] = [

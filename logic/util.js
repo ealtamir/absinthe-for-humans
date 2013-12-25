@@ -14,8 +14,10 @@
         チャレンジして失敗ことを恐れるよりも、何もしないことを恐れろ。
 */
 
-exports.name = "util";
+
+exports.name = 'util';
 
 exports.HelloWorld = function ( w, a, t ) {
-        return "Hello World!";
+  'use strict';
+  return 'Hello World!';
 };
