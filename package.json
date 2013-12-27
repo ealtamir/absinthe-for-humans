@@ -1,26 +1,27 @@
 {
-      "name": "Absinthe",
-      "version": "1.0.1",
-      "author": "Legify UG",
-      "description": "Ἀψίνθιον — A highly integrated, advanced and cluster-ready server.",
-      "contributors": [
-            { "name": "Kenan Sulayman", "email": "kenan@sly.mn" }
-      ],
-      "bin": {
-            "legify": "./app.js"
-      },
-      "scripts": {
-            "start": "node ./app.js"
-      },
-      "main": "./app.js",
-      "repository": {
-            "type": "git",
-            "url": "https://github.com/Legify/Absinthe.git"
-      },
-      "dependencies": {
-            "mime"  : "*",
-            "spdy"  : "*",
-            "jade"   : "*"
-      },
-      "jshintConfig": ".jshintrc"
+  "name": "Absinthe",
+  "version": "1.0.1",
+  "author": "Legify UG",
+  "description": "Ἀψίνθιον — A highly integrated, advanced and cluster-ready server.",
+  "contributors": [
+    { "name": "Kenan Sulayman", "email": "kenan@sly.mn" }
+  ],
+  "bin": {
+    "legify": "./app.js"
+  },
+  "scripts": {
+    "start": "node ./app.js"
+  },
+  "main": "./app.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Legify/Absinthe.git"
+  },
+  "dependencies": {
+    "mime"  : "*",
+    "spdy"  : "*",
+    "jade"  : "*",
+    "level" : "*"
+  },
+  "jshintConfig": ".jshintrc"
 }
