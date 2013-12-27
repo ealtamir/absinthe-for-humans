@@ -35,12 +35,12 @@ exports.compile = (function() {
         compileDebug  : true
       };
 
-  return function(temp_name, response, context) {
+  return function(temp_name, context, callback) {
     if (context === undefined && html[temp_name] !== undefined) {
-      return response.end(html[temp_name]);
+      return callback(html[temp_name]);
 
     } else if (context !== undefined && loaded[temp_name] !== undefined) {
-      return response.end(loaded[temp_name](context));
+      return callback(loaded[temp_name](context));
 
     } else {
       var file = fs.createReadStream(views[temp_name]);
@@ -54,18 +54,16 @@ exports.compile = (function() {
         var fn = jade.compile(buffer, options);
         if (context === undefined) {
           html[temp_name] = fn();
-          return response.end(html[temp_name]);
+          return callback(html[temp_name]);
         } else {
           context.prototype = options;
           loaded[temp_name] = fn;
-          return response.end(fn(context));
+          return callback(fn(context));
         }
       });
 
-      file.on('error', function() {
-        console.log('There was a problem reading file: ' +
-                    temp_name);
-        process.exit(1);
+      file.on('error', function(err) {
+        return callback(null, err);
       });
     }
   };
