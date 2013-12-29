@@ -1,0 +1,13 @@
+@import '_constants.scss';
+@import 'compass/utilities/color/contrast';
+
+
+body {
+    background-color: $bg_color;
+    color: $font-color;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+#main-header {
+    background-color: $header_color;
+}

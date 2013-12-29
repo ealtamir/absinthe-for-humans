@@ -1,3 +1,35 @@
-@import "compass/layout.scss";
+@import "_constants.scss";
+@import "compass/utilities/general/float";
 
-@include sticky-footer(70px);
+#main-header {
+    height: $header_height;
+    width: 100%;
+    position: fixed;
+    top: 0;
+    left: 0;
+    overflow: scroll;
+}
+
+#main-section {
+    height: 100%;
+    margin-top: $header_height + 5px;
+    margin-left: 5px;
+}
+.img_container {
+    width: 100%;
+    overflow-x: scroll;
+    overflow-y: auto;
+    img {
+        width: $l_img_width;
+        height: $l_img_height;
+        border: {
+            style: solid;
+            color: #2F2F33;
+            width: 2px;
+        }
+    }
+    td {
+        padding-right: 5px;
+        vertical-align: top;
+    }
+}

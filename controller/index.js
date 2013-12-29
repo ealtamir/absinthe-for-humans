@@ -17,7 +17,7 @@ exports.handler = function(req, res, uri) {
           return cancel(res);
         }
 
-        return logic.template.compile('index', data,
+        return logic.template.compile('index', JSON.parse(data),
           function(html, err) {
             if (err) {
               console.log('template.compile err: ' + err);

@@ -31,15 +31,17 @@ exports.compile = (function() {
       options = {
         filename      : 'default filename',
         pretty        : true,
-        debug         : false,
+        debug         : config.debug,
         compileDebug  : true
       };
 
   return function(temp_name, context, callback) {
-    if (context === undefined && html[temp_name] !== undefined) {
+    if (!options.debug && context === undefined &&
+        html[temp_name] !== undefined) {
       return callback(html[temp_name]);
 
-    } else if (context !== undefined && loaded[temp_name] !== undefined) {
+    } else if (!options.debug && context !== undefined &&
+               loaded[temp_name] !== undefined) {
       return callback(loaded[temp_name](context));
 
     } else {

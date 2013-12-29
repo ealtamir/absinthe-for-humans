@@ -1,4 +1,14 @@
 extends views/layout
 
 block content
-  h1 This is my content!!!!
+  section.img_container
+    table
+      tbody
+        tr
+          - var len = shots.length;
+          each _, index in shots
+            if (index % 4 === 0)
+              td
+                - for(var x = index, end = index + 4; x < end && x < len; x += 1)
+                  img(src=shots[x].image_url, alt=shots[x].title)
+
