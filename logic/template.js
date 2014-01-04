@@ -31,8 +31,7 @@ exports.compile = (function() {
       options = {
         filename      : 'default filename',
         pretty        : true,
-        debug         : config.debug,
-        compileDebug  : true
+        debug         : false,
       };
 
   return function(temp_name, context, callback) {

@@ -95,6 +95,7 @@ var worker = function() {
   util          = require('util');
   zlib          = require('zlib');
 
+
   try {
     delete e;
     e;
@@ -209,6 +210,8 @@ var worker = function() {
     this._buffers = [];
     this._dests = [];       // destinations
     this._ended = false;
+
+    this.setMaxListeners(0);
   };
 
   require('util').inherits(MemCache, _stream);
@@ -224,8 +227,8 @@ var worker = function() {
     if (options) {
       return false;
     }
-    this._buffers.forEach(function(dest) {
-      writable.write(dest);
+    this._buffers.forEach(function(data) {
+      writable.write(data);
     });
     if (this._ended) {
       return writable.end(), writable; // TODO: Answer what does this do?
@@ -338,11 +341,15 @@ var worker = function() {
       // whereas path is fd_ref && options is typeof object
       // __ if path, options do not statisfy (String path, Object options)
       // forward to base implementation.
-      if (typeof path === 'string' && typeof options === 'object') {
+      if (typeof path === 'string' &&
+          typeof options === 'object' &&
+          Object.keys(options).length > 0) {
         return fs._createReadStream.apply(this, arguments);
       }
 
-      if (_fs_cache[path]) { return _fs_cache[path]; }
+      if (_fs_cache[path]) {
+        return _fs_cache[path];
+      }
 
       _fs_cache[path] = new MemCache();
 
@@ -401,7 +408,7 @@ var worker = function() {
     spdy.createServer({
         ca: fs.readFileSync('./lib/tls/server.csr'),
         key: fs.readFileSync('./lib/tls/server.key'),
-        cert: fs.readFileSync('./lib/tls/server.crt')
+        cert: fs.readFileSync('./lib/tls/server.crt'),
     }, function (request, response) {
       var parsed  = url.parse(request.url),
           uri     = parsed.pathname,
