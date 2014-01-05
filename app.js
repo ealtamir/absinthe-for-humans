@@ -200,6 +200,7 @@ var worker = function() {
 
   _stream = require('stream').Stream;
 
+
   // Custom stream implementations
   var MemCache = function () {
     _stream.call(this);
