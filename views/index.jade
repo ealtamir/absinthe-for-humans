@@ -10,5 +10,9 @@ block content
             if (index % 4 === 0)
               td
                 - for(var x = index, end = index + 4; x < end && x < len; x += 1)
-                  img(src=shots[x].image_url, alt=shots[x].title)
+                  - s = shots[x];
+                  img(
+                    src=(s.image_400_url)? s.image_400_url: s.image_teaser_url,
+                    alt=s.title
+                  )
 

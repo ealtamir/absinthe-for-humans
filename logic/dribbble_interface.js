@@ -11,7 +11,7 @@ var Dribbble = (function() {
     hostname  : 'api.dribbble.com',
     pathname  : '',
     query     : {
-      per_page : 40
+      per_page : 50
     }
   };
 

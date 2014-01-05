@@ -17,18 +17,15 @@ exports.handler = function(req, response, uri) {
           return process.exit(1);
         }
 
-        setTimeout(function() {
-          return logic.template.compile('index', data,
-            function(html, err) {
-              if (err) {
-                console.log('template.compile err: ' + err);
-                return cancel(response);
-              }
-              return response.end(html);
+        return logic.template.compile('index', data,
+          function(html, err) {
+            if (err) {
+              console.log('template.compile err: ' + err);
+              return cancel(response);
             }
-          );
-        }, 500);
-
+            return response.end(html);
+          }
+        );
       }
     );
   }

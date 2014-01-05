@@ -66,7 +66,19 @@ def create_cb():
 
         name, extension = filename.split('.')
 
-        if extension == 'js':
+        if extension == 'scss':
+            print('\nChanged file: ' + event.name)
+            print(css_init)
+            cwd = os.getcwd()
+
+            os.chdir(os.sep.join((cwd, 'static')))
+            with Popen(['compass', 'compile', 'sass/main.scss'], stdout=PIPE) as f:
+                os.chdir(cwd)
+                f.wait()
+                for line in f.stdout:
+                    sys.stdout.write(line.decode('ascii', 'ignore'))
+
+        if extension in ['js', 'html', 'jade']:
             print('\nChanged file: ' + event.name)
             print(node_init)
             node_server.kill()
@@ -80,20 +92,9 @@ def create_cb():
             t = run_thread()
             t.start()
 
-        elif extension == 'scss':
-            print('\nChanged file: ' + event.name)
-            print(css_init)
-            cwd = os.getcwd()
-
-            os.chdir(os.sep.join((cwd, 'static')))
-            with Popen(['compass', 'compile', 'sass/main.scss'], stdout=PIPE) as f:
-                os.chdir(cwd)
-                f.wait()
-                for line in f.stdout:
-                    sys.stdout.write(line.decode('ascii', 'ignore'))
-
-        else:
-            None
+        if extension == 'py':
+            print('\nManually restart the plugin...')
+            sys.exit(1)
 
     return callback
 
