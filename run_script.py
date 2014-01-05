@@ -13,16 +13,21 @@ from subprocess import PIPE
 from fsevents import Observer
 from fsevents import Stream
 
+kill_thread = False
+kill_queue = False
 
 def read_queue(q):
-    while True:
+    global kill_queue
+    while True and not kill_queue:
         sys.stdout.write(q.get().decode('ascii', 'ignore'))
 
 
 def read_line(source, q, init):
-    while True:
+    global kill_thread
+    while True and not kill_thread:
         for line in source.stdout:
             q.put(line)
+    kill_thread = False
 
 
 def create_cb():
@@ -52,6 +57,8 @@ def create_cb():
         nonlocal t
         nonlocal node_init
 
+        global kill_thread
+
         filename = event.name.split(os.path.sep)[-1]
 
         if '.' not in filename:
@@ -61,9 +68,15 @@ def create_cb():
 
         if extension == 'js':
             print('\nChanged file: ' + event.name)
-            node_server.kill()
             print(node_init)
+            node_server.kill()
             node_server = run_server()
+
+            # Kill current thread: t
+            kill_thread = True
+            while kill_thread: None
+            kill_thread = False
+
             t = run_thread()
             t.start()
 
