@@ -44,7 +44,7 @@ exports.compile = (function() {
       return callback(loaded[temp_name](context));
 
     } else {
-      var file = fs.createReadStream(views[temp_name]);
+      var file = fs._createReadStream(views[temp_name]);
       var buffer = '';
 
       file.on('data', function(chunk) {

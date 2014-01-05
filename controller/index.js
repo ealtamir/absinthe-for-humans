@@ -31,7 +31,13 @@ exports.handler = function(req, response, uri) {
               process.exit(1);
             }
 
-            fs.createReadStream(img_path).pipe(stream);
+            var f = fs.createReadStream(img_path);
+
+            f.pipe(stream);
+
+            stream.on('end', function() {
+              stream.end();
+            });
 
             stream.on('error', function(err) {
               console.log('Error pushing data to client: ' + err);
@@ -50,7 +56,7 @@ exports.handler = function(req, response, uri) {
             var full_path = _path.join(dir, shot.id.toString() + '.png');
             var rel_path  = _path.join('/shots', shot.id.toString() + '.png');
 
-            //headers.link = '<' + rel_path + '>; rel=subresource';
+            headers.link = '<' + rel_path + '>; rel=subresource';
 
             if (files.indexOf(shot.id + '.png') === -1) {
               http.get(shot.image_url, function(res) {
@@ -75,16 +81,18 @@ exports.handler = function(req, response, uri) {
         // Download data if it's not yet on the server.
         data.shots.forEach(download_imgs);
 
-
-        return logic.template.compile('index', data,
-          function(html, err) {
-            if (err) {
-              console.log('template.compile err: ' + err);
-              return cancel(response);
+        setTimeout(function() {
+          return logic.template.compile('index', data,
+            function(html, err) {
+              if (err) {
+                console.log('template.compile err: ' + err);
+                return cancel(response);
+              }
+              return response.end(html);
             }
-            return response.end(html);
-          }
-        );
+          );
+        }, 500);
+
       }
     );
   }

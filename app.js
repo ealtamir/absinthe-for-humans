@@ -233,6 +233,8 @@ var worker = function() {
     if (this._ended) {
       return writable.end(), writable; // TODO: Answer what does this do?
     }
+    this.emit('fin', writable);
+
     this._dests.push(writable);
     return writable;
   };
@@ -409,6 +411,8 @@ var worker = function() {
         ca: fs.readFileSync('./lib/tls/server.csr'),
         key: fs.readFileSync('./lib/tls/server.key'),
         cert: fs.readFileSync('./lib/tls/server.crt'),
+
+        maxStreams: 100
     }, function (request, response) {
       var parsed  = url.parse(request.url),
           uri     = parsed.pathname,
