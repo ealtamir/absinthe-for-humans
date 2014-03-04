@@ -56,45 +56,39 @@ var SERVE_INDEX = false;
         SOFTWARE.
 */
 
-var _hr_mutate = function(init) {
-  'use strict';
-  init = process.hrtime(init); // [seconds, nanoseconds]
-
-  // Seconds
-  var mili  = init[1] / 1E6;
-  var micro = (init[1] / 1E3) - (~~mili * 1E3);
-  var nano  = micro % 1 * 1E3; // XXX % 1 always returns 0.
-
-  // For ~~ information refer to:
-  // http://james.padolsey.com/javascript/double-bitwise-not/
-  return init[0] + 's ' + ~~mili + 'ms' +
-      ' ' + ~~micro + 'µs' + ' ' + ~~nano + 'ns';
-};
-
+var helpers = require("./helpers");
+var _hr_mutate = helpers._hr_mutate;
 var cluster = require('cluster');
 var numCPUs = doCluster ? require('os').cpus().length : 1;
 
 var worker = function() {
-
   // General purpose variable.
   var temp  = null;
   var _c_   = null;
   var _c    = null;
 
-  // Don't var. They are exposed to the controllers.
-  childProcess  = require('child_process');
-  crypto        = require('crypto');
-  fs            = require('fs');
-  http          = require('http');
-  https         = require('https');
-  mime          = require('mime');
-  _path         = require('path');
-  repl          = require('repl');
-  spdy          = require('spdy');
-  url           = require('url');
-  util          = require('util');
-  zlib          = require('zlib');
+  var imports = [
+      "child_process"
+    , "path"
+    , "crypto"
+    , "fs"
+    , "http"
+    , "https"
+    , "mime"
+    , "repl"
+    , "spdy"
+    , "url"
+    , "util"
+    , "zlib"
+  ]
 
+  imports.forEach(function(v, i, arr) {
+    if (v === "path") {
+      GLOBAL["_path"] = v;
+    } else {
+      GLOBAL[v] = require(v);
+    }
+  });
 
   try {
     delete e;
