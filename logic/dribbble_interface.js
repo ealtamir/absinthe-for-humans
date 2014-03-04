@@ -1,5 +1,5 @@
 /* global http */
-var _ = require('underscore');
+var _ = require('lodash');
 
 var Dribbble = (function() {
   'use strict';

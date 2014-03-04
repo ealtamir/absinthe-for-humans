@@ -21,8 +21,7 @@
     "mime"        : "*",
     "spdy"        : "*",
     "jade"        : "*",
-    "level"       : "*",
-    "underscore"  : "*"
+    "lodash"  : "*"
   },
   "jshintConfig": ".jshintrc"
 }
