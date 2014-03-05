@@ -82,7 +82,7 @@ var worker = function() {
   var HTTP_DEFAULT_P  = 8081;
 
   // Loads many variables to the global environment
-  require('./server_init').init();
+  require('./server_init').server_init();
 
   var port = config.port;
 

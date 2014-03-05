@@ -1,13 +1,3 @@
-exports._hr_mutate = _hr_mutate;
-exports.better_require = better_require;
-
-exports.loadLogicModules = function() {
-  return extension_loaders('logic');
-};
-exports.loadControllerModules = function() {
-  return extension_loaders('controller');
-};
-
 var _hr_mutate = function(init) {
   'use strict';
   init = process.hrtime(init); // [seconds, nanoseconds]
@@ -26,12 +16,13 @@ var _hr_mutate = function(init) {
 
 var extension_loaders = function(type, obj) {
   var temp = null;
-  require('fs').readdirSync('./' + type).forEach(
+  var temp_func = function(file) {
     temp = file.split('.');
     if (temp[1] === 'js') {
       obj[temp[0]] = require('./' + type + '/' + file);
     }
-  );
+  };
+  require('fs').readdirSync('./' + type).forEach(temp_func);
 };
 
 // Prints routes loaded from controllers if any exist.
@@ -74,3 +65,17 @@ var printLoadedLogics = function(logic_obj) {
     }
   }
 };
+
+
+exports._hr_mutate = _hr_mutate;
+
+exports.loadLogicModules = function(logics) {
+  extension_loaders('logic', logics);
+  printLoadedControllers(logics);
+};
+
+exports.loadControllerModules = function(controllers) {
+  extension_loaders('controller', controllers);
+  printLoadedControllers(controllers);
+};
+

@@ -56,13 +56,11 @@ var checkV8 = function() {
 
 var loadControllersAndLogics = function() {
   GLOBAL.controller = {};
-  helpers.loadControllerModules();
-  helpers.printLoadedControllers(controller);
+  helpers.loadControllerModules(controller);
 
   // Load logical modules
   GLOBAL.logic = {};
-  helpers.loadLogicModules();
-  helpers.printLoadedLogics();
+  helpers.loadLogicModules(logic);
 };
 
 var loadBetterRequire = function() {
