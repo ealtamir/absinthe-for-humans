@@ -1,27 +1,5 @@
 #!/usr/local/bin/node
 
-// Toggle when using Absinthe in production
-// This will spread the process over all
-// available processor cores.
-
-// DO NOT toggle if your controllers
-// use single-thread techologies
-// like LevelDB (and its forks)
-// or your app will die crucially.
-
-// Make sure your data-endpoints
-// are configured accordingly
-// to support access from
-// multiple Node processes.
-
-var doCluster = false;
-
-// Node won't display your
-// controllers if you're
-// clustering Absinthe.
-//
-var SERVE_INDEX = false;
-
 /*
          __                            ___
         /\ \                     __  /'___\
@@ -56,8 +34,32 @@ var SERVE_INDEX = false;
         SOFTWARE.
 */
 
+
+// Toggle when using Absinthe in production
+// This will spread the process over all
+// available processor cores.
+
+// DO NOT toggle if your controllers
+// use single-thread techologies
+// like LevelDB (and its forks)
+// or your app will die crucially.
+
+// Make sure your data-endpoints
+// are configured accordingly
+// to support access from
+// multiple Node processes.
+
+GLOBAL.doCluster = false;
+
+// Node won't display your
+// controllers if you're
+// clustering Absinthe.
+//
+GLOBAL.SERVE_INDEX = false;
+
 var helpers = require("./helpers");
 var _hr_mutate = helpers._hr_mutate;
+
 var cluster = require('cluster');
 var numCPUs = doCluster ? require('os').cpus().length : 1;
 
@@ -67,185 +69,27 @@ var worker = function() {
   var _c_   = null;
   var _c    = null;
 
-  var imports = [
-      "child_process"
-    , "path"
-    , "crypto"
-    , "fs"
-    , "http"
-    , "https"
-    , "mime"
-    , "repl"
-    , "spdy"
-    , "url"
-    , "util"
-    , "zlib"
-  ]
-
-  imports.forEach(function(v, i, arr) {
-    if (v === "path") {
-      GLOBAL["_path"] = v;
-    } else {
-      GLOBAL[v] = require(v);
-    }
-  });
-
-  try {
-    delete e;
-    e;
-  } catch(e) {
-    v8 = e.stack != void(0);
-  } finally {
-    v8 = v8 || 0;
-  }
-
-  // Refer to https://gist.github.com/KenanSulayman/5281658.
-  var _require = require;
-
-  require = function(k) {
-    try {
-      return _require(k);
-    } catch (e) {
-      if (v8) {
-        _ = e.stack.split('\n'); // TODO: It is not clear what e.stack is.
-        __ = '';
-        for (var a in _) {
-          if (_.hasOwnProperty(a)) {
-            temp = _[a].match(/\(([^)]+)\)/g);
-            if (temp !== null) {
-              __ += (new Array(+a + 1)).join(' ') + '=> ' + temp + '\n';
-            }
-          }
-        }
-        console.log(_[0], '[' + k + ']\n', __);
-        process.exit();
-      } else {
-        console.trace('=== FATAL ERROR: \'' + k + '\' ===');
-        process.exit();
-      }
-    }
-  };
+  // Used to substitute normal require if using V8
+  var _require = null;
 
   // Constants
-  var ABSINTHE  = {
-        version : function() {
-          return '1';
-        }
-      },
-      DEFAULT_PORT    = 8080,
-      HTTP_DEFAULT_P  = 8081;
-
-  // Configuration
-  config = require('./lib/config').config;
-
-  // Extensions
-  // Load router modules
-  controller = {};
-  require('fs').readdirSync('./controller').forEach(
-    function(file) {
-      temp = file.split('.');
-      if (temp[1] === 'js') {
-        controller[temp[0]] = require('./controller/' + file);
-      }
+  var ABSINTHE = {
+    version: function() {
+      return '1';
     }
-  );
+  };
+  var DEFAULT_PORT    = 8080;
+  var HTTP_DEFAULT_P  = 8081;
 
-  // Prints routes loaded from controllers if any exist.
-  if (!doCluster) {
-    _c_ = [];
-    for (_c in controller) {
-      if (controller.hasOwnProperty(_c)) {
-        temp = '\'' + controller[_c].name + '\'[.js] => ' +
-          (controller[_c].paths.length > 0)?
-            controller[_c].paths.join(', ') : '<virtual>';
-        _c_.push(temp);
-      }
-    }
-    if (_c_.length) {
-      console.log('Initialized Routers:\n\t' + _c_.join('\n\t') + '\n');
-    }
-  }
+  // Loads many variables to the global environment
+  require('./server_init').init();
 
-  // Load logical modules
-  logic = {};
-  require('fs').readdirSync('./logic').forEach(
-    function(file) {
-      temp = file.split('.');
-      if (temp[1] === 'js') {
-        logic[temp[0]] = require('./logic/' + file);
-      }
-    }
-  );
-
-  if (!doCluster) {
-    // _c_ and _c previously defined
-    _c_ = [];
-    for (_c in logic) {
-      if (logic.hasOwnProperty(_c)) {
-        _c_.push('\'' + logic[_c].name + '\'');
-      }
-    }
-    if (_c_.length) {
-      console.log('Initialized Logics:\n\t' + _c_.join('\n\t') + '\n');
-    }
-  }
-
-  var port = parseInt(process.argv[2] || 80, 10);
+  var port = config.port;
 
   _stream = require('stream').Stream;
 
-
   // Custom stream implementations
-  var MemCache = function () {
-    _stream.call(this);
-
-    this.readable = true;
-    this.writable = true;
-
-    this._buffers = [];
-    this._dests = [];       // destinations
-    this._ended = false;
-
-    this.setMaxListeners(0);
-  };
-
-  require('util').inherits(MemCache, _stream);
-
-  MemCache.prototype.write = function(data) {
-    this._buffers.push(data);
-    this._dests.forEach(function(dest) {
-      dest.write(data);
-    });
-  };
-
-  MemCache.prototype.pipe = function(writable, options) {
-    if (options) {
-      return false;
-    }
-    this._buffers.forEach(function(data) {
-      writable.write(data);
-    });
-    if (this._ended) {
-      return writable.end(), writable; // TODO: Answer what does this do?
-    }
-    this.emit('fin', writable);
-
-    this._dests.push(writable);
-    return writable;
-  };
-
-  MemCache.prototype.getLength = function () {
-    return this._buffers.reduce(function (preVal, curVal) {
-      return preVal + curVal.length;
-    }, 0);
-  };
-
-  MemCache.prototype.end = function () {
-    this._dests.forEach(function(dest) { dest.end(); });
-    this._ended = true;
-    this._dests = [];
-  };
-
+  var MemCache = require('./custom_memcache').MemCache(_stream);
 
   /*
       PRIMARY
@@ -257,8 +101,8 @@ var worker = function() {
 
   // TODO: Find out what is ctype.
   var readDictionary = function(start, ctype, callback) {
-    var readDir = null,
-        stash   = {};
+    var readDir = null;
+    var stash   = {};
 
     if (ctype instanceof Function) {
       callback = ctype;
