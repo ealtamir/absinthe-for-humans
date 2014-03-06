@@ -99,15 +99,49 @@ var worker = function() {
                   010 - Object-Stat Hashmap
   */
 
-  var addInfo = (function(ctype) {
-    return function(stash, dict, path, stat) {
-      if (ctype === 1) {
-        dict.push(path);
-      } else if (ctype === 2) {
-        stash[path] = stat;
+  var addInfo = function(ctype, stash, dict, path, stat) {
+    if (ctype === 1) {
+      dict.push(path);
+    } else if (ctype === 2) {
+      stash[path] = stat;
+    }
+  };
+
+  var processDirEntries = function(ctype, start, processed, stash, found, total, callback) {
+    return function(file, i, dir) {
+      var abspath  = null;
+      var stat     = null;
+
+      abspath = _path.join(start, file);
+      stat = fs.statSync(abspath);
+      if (stat === void(0)) {
+        return callback(null);
+      }
+
+      if (!stat.isDirectory()) {
+        addInfo(ctype, stash, found.files, abspath, stat);
+
+        processed += 1;
+        if (processed === dir.length) {
+          callback(null, found, stash);
+        }
+      } else {
+        addInfo(ctype, stash, found.dirs, abspath, stat);
+
+        readDir(abspath, function(err, data) {
+          if (ctype === 1) {
+            found.dir   = found.dirs.concat(data.dirs);
+            found.files = found.files.concat(data.files);
+          }
+
+          processed += 1;
+          if (processed === total) {
+            callback(null, found, stash);
+          }
+        });
       }
     };
-  }(ctype));
+  }
 
   readDir = function(start, ctype, callback) {
     var found = {
@@ -126,10 +160,6 @@ var worker = function() {
       ctype = 1;
     }
 
-    console.log('readDir callback: ');
-    console.dir(callback);
-
-
     // Adds info to stash or found obj depending on
     // the ctype that was chosen.
     stat = fs.lstatSync(start);
@@ -145,39 +175,9 @@ var worker = function() {
       return callback(null, found, total);
     }
 
-    dirContents.forEach(function(file, i, dir) {
-      var abspath  = null;
-      var stat     = null;
-
-      abspath = _path.join(start, file);
-      stat = fs.statSync(abspath);
-      if (stat === void(0)) {
-        return callback(null);
-      }
-
-      if (!stat.isDirectory()) {
-        addInfo(stash, found.files, abspath, stat);
-
-        processed += 1;
-        if (processed === dir.length) {
-          callback(null, found, stash);
-        }
-      } else {
-        addInfo(stash, found.dirs, abspath, stat);
-
-        readDir(abspath, function(err, data) {
-          if (ctype === 1) {
-            found.dir   = found.dirs.concat(data.dirs);
-            found.files = found.files.concat(data.files);
-          }
-
-          processed += 1;
-          if (processed === total) {
-            callback(null, found, stash);
-          }
-        });
-      }
-    });
+    dirContents.forEach(
+      processDirEntries(ctype, start, processed, stash, found, total, addInfo, callback)
+    );
   };
 
   // TODO: Find out what is ctype.
