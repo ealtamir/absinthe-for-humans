@@ -22,7 +22,7 @@ exports.paths = [
 // tracking pixel ftw
 var pixel = new Buffer("R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=", "base64");
 
-exports.handler = function ( request, response, uri ) {
+exports.handler = function (request, response, uri) {
     if ( request.url == "/start" || request.url == "/start/" ) {
         // references the logic (/logic) named "util"(.js)
         return response.end(logic.util.HelloWorld());

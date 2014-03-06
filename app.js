@@ -239,14 +239,13 @@ var worker = function() {
     var stat  = fs.statSync(resvd);
 
     if (stat === void(0)) {
-      console.log('Error inside sanitize function.');
-      console.dir(err);
+      console.log('Couldn\'t read directory in sanitize function');
       return callback(uri, resvd);
     }
 
     var isDirectory = stat.isDirectory();
 
-        // when path is '/' serves index.html
+    // when path is '/' serves index.html
     var forceDelegation = uri.substr(-1) !== '/';
 
     if (isDirectory) {
@@ -266,7 +265,6 @@ var worker = function() {
     return callback.apply(this, ucache[uri]);
   };
 
-
   readDictionary('./static', 2, readDir,
     function (_fm) {
       var  _fs                =  {};
@@ -279,9 +277,9 @@ var worker = function() {
           key: fs.readFileSync('./lib/tls/server.key'),
           cert: fs.readFileSync('./lib/tls/server.crt'),
       }, function (request, response) {
-        var parsed  = url.parse(request.url),
-            uri     = parsed.pathname,
-            temp    = null;
+        var parsed  = url.parse(request.url);
+        var uri     = parsed.pathname;
+        var temp    = null;
 
         request._params = {};
 
@@ -355,10 +353,9 @@ var worker = function() {
 
           if (!_fs[fn_]) { return cancel(response); }
 
-          var s       = fs.createReadStream(fn_),
-              etag    = _fm['static' + uri] && _fm['static' + uri].mtime || '0',
-              ntag    = +etag;
-
+          var s    = fs.createReadStream(fn_);
+          var etag = _fm['static' + uri] && _fm['static' + uri].mtime || '0';
+          var ntag = +etag;
 
           if (request.headers['if-none-match'] === ntag) {
             return response.end(response.writeHead(304, {
@@ -371,13 +368,13 @@ var worker = function() {
             }));
           }
 
-          var aE        = request.headers['accept-encoding'] || '',
-              _resHead  = {
-                'Content-Type': mime.lookup(fn_),
-                'Cache-control': 'max-age=604800',
-                'Expire': new Date().toString(),
-                'Etag': ntag
-              };
+          var aE = request.headers['accept-encoding'] || '';
+          var _resHead  = {
+            'Content-Type': mime.lookup(fn_),
+            'Cache-control': 'max-age=604800',
+            'Expire': new Date().toString(),
+            'Etag': ntag
+          };
 
           var compress = function(name, obj, cache) {
             _resHead['Content-Encoding'] = name;
