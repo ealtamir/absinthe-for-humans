@@ -214,6 +214,21 @@ var worker = function() {
     );
   };
 
+  // SECURITY: Cancel request if it tries to access dirs
+  // outside the project dir.
+  var doSecurityCheck = function(fn_, uri) {
+    if ( /\.\.\/\.\./.test(uri) || /\.\/\.\./.test(uri) ) {
+      return false;
+    }
+    if ( fn_.length < (process.cwd()).length ) {
+      return false;
+    }
+    if ( ~uri.indexOf('/../') ) {
+      return false;
+    }
+    return true;
+  }
+
   var readDictionary = function(start, ctype, readDir, callback) {
     // Callback gets status, files found and number of files.
     return readDir(start, ctype, function(a, b, c) {
@@ -265,155 +280,172 @@ var worker = function() {
     return callback.apply(this, ucache[uri]);
   };
 
-  readDictionary('./static', 2, readDir,
-    function (_fm) {
-      var  _fs                =  {};
-      var  _fs_cache_deflate  =  {};
-      var  _fs_cache_gzip     =  {};
-      var  ucache             =  {};
+  var delegateToController = function(uri, controller, request, response) {
+    for (var router in controller) {
+      for (var route in controller[router].paths) {
+        temp = controller[router].paths[route]; // path name
+        if (uri === temp) {
+          return controller[router].handler.apply(this, [
+            request,
+            response,
+            controller[router].paths[route],
+            uri
+          ]);
+        }
+      }
+    }
 
-      spdy.createServer({
-          ca: fs.readFileSync('./lib/tls/server.csr'),
-          key: fs.readFileSync('./lib/tls/server.key'),
-          cert: fs.readFileSync('./lib/tls/server.crt'),
-      }, function (request, response) {
-        var parsed  = url.parse(request.url);
-        var uri     = parsed.pathname;
-        var temp    = null;
+    return false;
+  };
 
-        request._params = {};
+  // BLACKLIST
+  var checkBlacklist = function(uri, response) {
+    var rpaths = config.blacklist;
+    for (var rpath in rpaths) {
+      if (uri.substr(0, rpaths[rpath].length) === rpaths[rpath]) {
+        response.writeHead(418, {
+          'Content-Type': 'text/plain'
+        });
+        return response.end('418 I\'m a teapot\n');
+      }
+    }
+    return false;
+  };
 
-        // Parse and format url params.
-        if (parsed.query) {
-          parsed.query.split('&').forEach(function(param) {
-            temp = param.split('=');
-            request._params[temp[0]] =
-              decodeURIComponent(temp[1]).replace(/\+/g, ' ');
+  var serveFromCacheOrCrompress = function(request, response) {
+    var s    = fs.createReadStream(fn_);
+    var etag = _fm['static' + uri] && _fm['static' + uri].mtime || '0';
+    var ntag = +etag;
+
+    if (request.headers['if-none-match'] === ntag) {
+      return response.end(response.writeHead(304, {
+        'Date': etag.toString(),
+        'Etag': ntag,
+        'Cache-Control': 'max-age=86400, public',
+        'Content-type': 'image/jpeg',
+        'Keep-Alive': 'timeout=6, max=32',
+        'Connection': 'keep-alive'
+      }));
+    }
+
+    var aE = request.headers['accept-encoding'] || '';
+    var _resHead  = {
+      'Content-Type': mime.lookup(fn_),
+      'Cache-control': 'max-age=604800',
+      'Expire': new Date().toString(),
+      'Etag': ntag
+    };
+
+    var compress = function(name, obj, cache) {
+      _resHead['Content-Encoding'] = name;
+      response.writeHead(200, _resHead);
+
+      if (cache[fn_]) {
+        return cache[fn_].pipe(response);
+      }
+
+      cache[fn_] = new MemCache();
+      s.pipe(obj).pipe(cache[fn_]);
+      return cache[fn_].pipe(response);
+    };
+
+    if (~aE.indexOf('deflate')) {
+      return compress('deflate', zlib.createDeflate(), _fs_cache_deflate);
+    } else if (~aE.indexOf('gzip')) {
+      return compress('gzip', zlib.createGzip(), _fs_cache_gzip);
+    } else {
+      response.writeHead(200, _resHead);
+      return s.pipe(response);
+    }
+  };
+
+  //request._params = {};
+
+  //// Parse and format url params.
+  //if (parsed.query) {
+  //  parsed.query.split('&').forEach(function(param) {
+  //    temp = param.split('=');
+  //    request._params[temp[0]] =
+  //      decodeURIComponent(temp[1]).replace(/\+/g, ' ');
+  //  });
+  //}
+
+  var test2 = function (_fm) {
+    var  _fs               = {};
+    var  _fs_cache_deflate = {};
+    var  _fs_cache_gzip    = {};
+    var  ucache            = {};
+
+    var hello = function (request, response) {
+      var parsed  = url.parse(request.url);
+      var uri     = parsed.pathname;
+      var temp    = null;
+
+      sanitize(uri, ucache, function(uri, fn_, forceDelegation) {
+        response._writeHead = response.writeHead;
+
+        response.writeHead = function (statusCode, headers) {
+          headers = headers || {};
+
+          headers.libAbsinthe = 'r' + ABSINTHE.version;
+
+          return response._writeHead.apply(this, [statusCode, headers]);
+        };
+
+        if (forceDelegation) {
+          response.writeHead(307, {
+              'Location': uri
           });
+          return response.end();
         }
 
-        sanitize(uri, ucache, function(uri, fn_, forceDelegation) {
-          response._writeHead = response.writeHead;
-          response.writeHead = function (statusCode, headers) {
-            headers = headers || {};
+        if (doSecurityCheck(fn_, uri) !== true) {
+          return cancel(response);
+        }
 
-            headers.libAbsinthe = 'r' + ABSINTHE.version;
+        // ROUTER
+        temp = delegateToController(uri, controller, request, response);
+        if (temp !== false) {
+          return temp
+        }
 
-            return response._writeHead.apply(this, [statusCode, headers]);
-          };
+        temp = checkBlacklist(uri, response);
+        if (temp !== false) {
+          return temp
+        }
 
-          if (forceDelegation) {
-            response.writeHead(307, {
-                'Location': uri
-            });
-            return response.end();
-          }
+        if (_fs[fn_] === void(0)) {
+          _fs[fn_] = fs.existsSync(fn_);
+        }
 
-          // SECURITY: Cancel request if tries to access dirs
-          // outside the project dir.
-          if ( /\.\.\/\.\./.test(uri) || /\.\/\.\./.test(uri) ) {
-            return cancel(response);
-          }
-          if ( fn_.length < (process.cwd()).length ) {
-            return cancel(response);
-          }
-          if ( ~uri.indexOf('/../') ) {
-            return cancel(response);
-          }
+        if (!_fs[fn_]) {
+          return cancel(response);
+        }
 
-          // ROUTER
-          for (var router in controller) {
-              // Why does route have no 'var'?
-            for (var route in controller[router].paths) {
-              temp = controller[router].paths[route]; // path name
-              if ((uri.substr(0, temp.length) === temp && (uri.substr(temp.length, 1) == '/')) || uri === temp) {
-                return controller[router].handler.apply(this, [
-                  request,
-                  response,
-                  controller[router].paths[route],
-                  uri
-                ]);
-              }
-            }
-          }
+        return serveFromCacheOrCrompress(request, response);
+      });
+    };
 
-          // BLACKLIST
-          rpaths = config.blacklist;
+    spdy.createServer({
+        ca: fs.readFileSync('./lib/tls/server.csr'),
+        key: fs.readFileSync('./lib/tls/server.key'),
+        cert: fs.readFileSync('./lib/tls/server.crt'),
+      }, hello
+    ).listen(DEFAULT_PORT);
 
-          for (var rpath in rpaths) {
-            if (uri.substr(0, rpaths[rpath].length) === rpaths[rpath]) {
-              response.writeHead(418, {
-                'Content-Type': 'text/plain'
-              });
-              return response.end('418 I\'m a teapot\n');
-            }
-          }
+    http.createServer(function (request, response) {
+      if (!request.headers.host) { response.end(); }
 
-          if (_fs[fn_] === void(0)) { _fs[fn_] = fs.existsSync(fn_); }
+      return response.writeHead(302, {
+              'Location': 'https://sly.mn' + request.url
+      }), response.end();
+    }).listen(HTTP_DEFAULT_P);
 
-          if (!_fs[fn_]) { return cancel(response); }
+    console.log('[' + process.pid + '] Ready.');
+  };
 
-          var s    = fs.createReadStream(fn_);
-          var etag = _fm['static' + uri] && _fm['static' + uri].mtime || '0';
-          var ntag = +etag;
+  readDictionary('./static', 2, readDir, test2);
 
-          if (request.headers['if-none-match'] === ntag) {
-            return response.end(response.writeHead(304, {
-              'Date': etag.toString(),
-              'Etag': ntag,
-              'Cache-Control': 'max-age=86400, public',
-              'Content-type': 'image/jpeg',
-              'Keep-Alive': 'timeout=6, max=32',
-              'Connection': 'keep-alive'
-            }));
-          }
-
-          var aE = request.headers['accept-encoding'] || '';
-          var _resHead  = {
-            'Content-Type': mime.lookup(fn_),
-            'Cache-control': 'max-age=604800',
-            'Expire': new Date().toString(),
-            'Etag': ntag
-          };
-
-          var compress = function(name, obj, cache) {
-            _resHead['Content-Encoding'] = name;
-            response.writeHead(200, _resHead);
-
-            if (cache[fn_]) {
-              return cache[fn_].pipe(response);
-            }
-
-            cache[fn_] = new MemCache();
-            s.pipe(obj).pipe(cache[fn_]);
-            return cache[fn_].pipe(response);
-          };
-
-          if (~aE.indexOf('deflate')) {
-            return compress('deflate', zlib.createDeflate(), _fs_cache_deflate);
-
-          } else if (~aE.indexOf('gzip')) {
-            return compress('gzip', zlib.createGzip(), _fs_cache_gzip);
-
-          } else {
-            response.writeHead(200, _resHead);
-            return s.pipe(response);
-          }
-
-        });
-      }).listen(DEFAULT_PORT);
-
-      http.createServer(function (request, response) {
-        if (!request.headers.host) { response.end(); }
-
-        return response.writeHead(302, {
-                'Location': 'https://sly.mn' + request.url
-        }), response.end();
-      }).listen(HTTP_DEFAULT_P);
-
-      console.log('[' + process.pid + '] Ready.');
-    }
-  );
 };
 
 if (!cluster.isMaster) {
