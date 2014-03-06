@@ -91,6 +91,42 @@ var worker = function() {
   // Custom stream implementations
   var MemCache = require('./custom_memcache').MemCache(_stream);
 
+  var err = _path.join(__dirname, config.path404);
+
+  var cancel = function(response) {
+    response.writeHead(404, {
+        'Content-Type': 'text/html'
+    });
+    return fs.createReadStream(err).pipe(response);
+  };
+
+  var _fs_cache = {};
+
+  fs._createReadStream = fs.createReadStream;
+
+  fs.createReadStream = function(path, options) {
+    options = options || {};
+
+    // whereas path is fd_ref && options is typeof object
+    // __ if path, options do not statisfy (String path, Object options)
+    // forward to base implementation.
+    if (typeof path === 'string' &&
+        typeof options === 'object' &&
+        Object.keys(options).length > 0) {
+      return fs._createReadStream.apply(this, arguments);
+    }
+
+    if (_fs_cache[path]) {
+      return _fs_cache[path];
+    }
+
+    _fs_cache[path] = new MemCache();
+
+    // Sends contents of file at 'path' to a buffer
+    fs._createReadStream(path, options).pipe(_fs_cache[path]);
+    return _fs_cache[path];
+  };
+
   /*
       PRIMARY
 
@@ -109,11 +145,9 @@ var worker = function() {
 
   var processDirEntries = function(ctype, start, processed, stash, found, total, callback) {
     return function(file, i, dir) {
-      var abspath  = null;
-      var stat     = null;
+      var abspath = _path.join(start, file);
+      var stat = fs.statSync(abspath);
 
-      abspath = _path.join(start, file);
-      stat = fs.statSync(abspath);
       if (stat === void(0)) {
         return callback(null);
       }
@@ -149,11 +183,11 @@ var worker = function() {
       files : []
     };
 
-    var processed      = 0;
-    var dirContents    = null;
-    var stash          = {};
-    var stat           = null;
-    var total          = 0;
+    var processed   = 0;
+    var dirContents = null;
+    var stash       = {};
+    var stat        = null;
+    var total       = 0;
 
     if (ctype instanceof Function) {
       callback = ctype;
@@ -180,13 +214,7 @@ var worker = function() {
     );
   };
 
-  // TODO: Find out what is ctype.
   var readDictionary = function(start, ctype, readDir, callback) {
-    if (ctype instanceof Function) {
-      callback = ctype;
-      ctype = 1;
-    }
-
     // Callback gets status, files found and number of files.
     return readDir(start, ctype, function(a, b, c) {
       if (!(ctype ^ 3)) {
@@ -201,90 +229,55 @@ var worker = function() {
     });
   };
 
+  // Checks if path exists and decides which file to serve.
+  var sanitize = function (uri, ucache, callback) {
+    if (ucache[uri]) {
+      return callback.apply(this, ucache[uri]);
+    }
+
+    var resvd = _path.join(process.cwd(), '/static', uri);
+    var stat  = fs.statSync(resvd);
+
+    if (stat === void(0)) {
+      console.log('Error inside sanitize function.');
+      console.dir(err);
+      return callback(uri, resvd);
+    }
+
+    var isDirectory = stat.isDirectory();
+
+        // when path is '/' serves index.html
+    var forceDelegation = uri.substr(-1) !== '/';
+
+    if (isDirectory) {
+      if (forceDelegation) {
+        uri += '/';
+      } else {
+        uri += SERVE_INDEX ? 'index.html': '';
+      }
+    }
+
+    ucache[uri] = [
+      uri,
+      _path.join(process.cwd(), '/static', uri),
+      isDirectory && forceDelegation
+    ];
+
+    return callback.apply(this, ucache[uri]);
+  };
+
+
   readDictionary('./static', 2, readDir,
     function (_fm) {
-      var _fs               = {};
-      var _fs_cache         = {};
-      var _fs_cache_deflate = {};
-      var _fs_cache_gzip    = {};
-
-      fs._createReadStream = fs.createReadStream;
-
-      fs.createReadStream = function(path, options) {
-        options = options || {};
-
-        // whereas path is fd_ref && options is typeof object
-        // __ if path, options do not statisfy (String path, Object options)
-        // forward to base implementation.
-        if (typeof path === 'string' &&
-            typeof options === 'object' &&
-            Object.keys(options).length > 0) {
-          return fs._createReadStream.apply(this, arguments);
-        }
-
-        if (_fs_cache[path]) {
-          return _fs_cache[path];
-        }
-
-        _fs_cache[path] = new MemCache();
-
-        // Sends contents of file at 'path' to a buffer
-        fs._createReadStream(path, options).pipe(_fs_cache[path]);
-        return _fs_cache[path];
-      };
-
-      var err = _path.join(__dirname, 'lib/error/404.html');
-
-      var cancel = function(response) {
-        response.writeHead(404, {
-            'Content-Type': 'text/html'
-        });
-        return fs.createReadStream(err).pipe(response);
-      };
-
-      var ucache = {};
-      // Checks if path exists and decides which file to serve.
-      var sanitize = function (uri, callback) {
-        if (ucache[uri]) { return callback.apply(this, ucache[uri]); }
-
-        var resvd = _path.join(process.cwd(), '/static', uri);
-
-        fs.stat(resvd, function (err, stat) {
-          if (err) {
-            console.log('Error inside sanitize function.');
-            console.dir(err);
-            return callback(uri, resvd);
-          }
-
-          var isDirectory     = stat.isDirectory(),
-              // when path is '/' serves index.html
-              forceDelegation = uri.substr(-1) !== '/';
-
-          // TODO: If path is a directory, what do you serve?
-          if (isDirectory) {
-            if (forceDelegation) {
-              uri += '/';
-            } else {
-              uri += SERVE_INDEX ? 'index.html': '';
-            }
-          }
-
-          ucache[uri] = [
-            uri,
-            _path.join(process.cwd(), '/static', uri),
-            isDirectory && forceDelegation
-          ];
-
-          return callback.apply(this, ucache[uri]);
-        });
-      };
+      var  _fs                =  {};
+      var  _fs_cache_deflate  =  {};
+      var  _fs_cache_gzip     =  {};
+      var  ucache             =  {};
 
       spdy.createServer({
           ca: fs.readFileSync('./lib/tls/server.csr'),
           key: fs.readFileSync('./lib/tls/server.key'),
           cert: fs.readFileSync('./lib/tls/server.crt'),
-
-          maxStreams: 100
       }, function (request, response) {
         var parsed  = url.parse(request.url),
             uri     = parsed.pathname,
@@ -301,7 +294,7 @@ var worker = function() {
           });
         }
 
-        sanitize(uri, function(uri, fn_, forceDelegation) {
+        sanitize(uri, ucache, function(uri, fn_, forceDelegation) {
           response._writeHead = response.writeHead;
           response.writeHead = function (statusCode, headers) {
             headers = headers || {};
