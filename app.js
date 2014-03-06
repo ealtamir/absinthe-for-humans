@@ -99,297 +99,331 @@ var worker = function() {
                   010 - Object-Stat Hashmap
   */
 
-  // TODO: Find out what is ctype.
-  var readDictionary = function(start, ctype, callback) {
-    var readDir = null;
-    var stash   = {};
+  var addInfo = (function(ctype) {
+    return function(stash, dict, path, stat) {
+      if (ctype === 1) {
+        dict.push(path);
+      } else if (ctype === 2) {
+        stash[path] = stat;
+      }
+    };
+  }(ctype));
+
+  readDir = function(start, ctype, callback) {
+    var found = {
+      dirs  : [],
+      files : []
+    };
+
+    var processed      = 0;
+    var dirContents    = null;
+    var stash          = {};
+    var stat           = null;
+    var total          = 0;
 
     if (ctype instanceof Function) {
       callback = ctype;
       ctype = 1;
     }
 
-    // Callback gets status, files found and number of files.
-    readDir = function(start, callback) {
-      fs.lstat(start, function(err, stat) {
-        if (err) { return callback(err); }
+    console.log('readDir callback: ');
+    console.dir(callback);
 
-        var found = {
-              dirs  : [],
-              files : []
-            },
-            total     = 0,
-            processed = 0;
 
-        if (!stat.isDirectory()) {
-          return false;
-        } else {
-          fs.readdir(start, function(err, files) {
-            total = files.length;
+    // Adds info to stash or found obj depending on
+    // the ctype that was chosen.
+    stat = fs.lstatSync(start);
+    if (stat === void(0)) {
+      callback(null);
+    } else if (!stat.isDirectory()) {
+      return false;
+    }
 
-            if (!total) { return callback(null, found, total); }
+    dirContents = fs.readdirSync(start);
 
-            files.forEach(function(file) {
-              var abspath = _path.join(start, file);
+    if (dirContents.length === 0) {
+      return callback(null, found, total);
+    }
 
-              fs.stat(abspath, function(err, stat) {
-                if (stat.isDirectory()) {
-                  // TODO: What is the stash used for?
-                  if (ctype === 1) { found.dirs.push(abspath); }
-                  else if (ctype === 2) { stash[abspath] = stat; }
+    dirContents.forEach(function(file, i, dir) {
+      var abspath  = null;
+      var stat     = null;
 
-                  readDir(abspath, function(err, data) {
-                    if (ctype === 1) {
-                      found.dir   = found.dirs.concat(data.dirs);
-                      found.files = found.files.concat(data.files);
-                    }
+      abspath = _path.join(start, file);
+      stat = fs.statSync(abspath);
+      if (stat === void(0)) {
+        return callback(null);
+      }
 
-                    processed += 1;
-                    if (processed === total) { callback(null, found, stash); }
-                  });
-                } else {
-                  if (ctype === 1) { found.files.push(abspath); }
-                  else if (ctype === 2) { stash[abspath] = stat; }
+      if (!stat.isDirectory()) {
+        addInfo(stash, found.files, abspath, stat);
 
-                  processed += 1;
-                  if (processed === total) { callback(null, found, stash); }
-                }
-              });
-            });
-          });
+        processed += 1;
+        if (processed === dir.length) {
+          callback(null, found, stash);
         }
-      });
-    };
+      } else {
+        addInfo(stash, found.dirs, abspath, stat);
 
-    return readDir(start, function(a, b, c) {
-      if (!(ctype ^ 3)) { return callback(b, c); }
-      if (ctype & 1)    { return callback(b); }
-      if (ctype & 2)    { return callback(c); }
+        readDir(abspath, function(err, data) {
+          if (ctype === 1) {
+            found.dir   = found.dirs.concat(data.dirs);
+            found.files = found.files.concat(data.files);
+          }
+
+          processed += 1;
+          if (processed === total) {
+            callback(null, found, stash);
+          }
+        });
+      }
     });
   };
 
-  readDictionary('./static', 2, function (_fm) {
-    var _fs               = {},
-        _fs_cache         = {},
-        _fs_cache_deflate = {},
-        _fs_cache_gzip    = {};
+  // TODO: Find out what is ctype.
+  var readDictionary = function(start, ctype, readDir, callback) {
+    if (ctype instanceof Function) {
+      callback = ctype;
+      ctype = 1;
+    }
 
-    fs._createReadStream = fs.createReadStream;
-
-    fs.createReadStream = function(path, options) {
-      options = options || {};
-
-      // whereas path is fd_ref && options is typeof object
-      // __ if path, options do not statisfy (String path, Object options)
-      // forward to base implementation.
-      if (typeof path === 'string' &&
-          typeof options === 'object' &&
-          Object.keys(options).length > 0) {
-        return fs._createReadStream.apply(this, arguments);
+    // Callback gets status, files found and number of files.
+    return readDir(start, ctype, function(a, b, c) {
+      if (!(ctype ^ 3)) {
+        return callback(b, c);
       }
+      if (ctype & 1) {
+        return callback(b);
+      }
+      if (ctype & 2) {
+        return callback(c);
+      }
+    });
+  };
 
-      if (_fs_cache[path]) {
+  readDictionary('./static', 2, readDir,
+    function (_fm) {
+      var _fs               = {};
+      var _fs_cache         = {};
+      var _fs_cache_deflate = {};
+      var _fs_cache_gzip    = {};
+
+      fs._createReadStream = fs.createReadStream;
+
+      fs.createReadStream = function(path, options) {
+        options = options || {};
+
+        // whereas path is fd_ref && options is typeof object
+        // __ if path, options do not statisfy (String path, Object options)
+        // forward to base implementation.
+        if (typeof path === 'string' &&
+            typeof options === 'object' &&
+            Object.keys(options).length > 0) {
+          return fs._createReadStream.apply(this, arguments);
+        }
+
+        if (_fs_cache[path]) {
+          return _fs_cache[path];
+        }
+
+        _fs_cache[path] = new MemCache();
+
+        // Sends contents of file at 'path' to a buffer
+        fs._createReadStream(path, options).pipe(_fs_cache[path]);
         return _fs_cache[path];
-      }
+      };
 
-      _fs_cache[path] = new MemCache();
+      var err = _path.join(__dirname, 'lib/error/404.html');
 
-      // Sends contents of file at 'path' to a buffer
-      fs._createReadStream(path, options).pipe(_fs_cache[path]);
-      return _fs_cache[path];
-    };
-
-    var err = _path.join(__dirname, 'lib/error/404.html');
-
-    var cancel = function(response) {
-      response.writeHead(404, {
-          'Content-Type': 'text/html'
-      });
-      return fs.createReadStream(err).pipe(response);
-    };
-
-    var ucache = {};
-    // Checks if path exists and decides which file to serve.
-    var sanitize = function (uri, callback) {
-      if (ucache[uri]) { return callback.apply(this, ucache[uri]); }
-
-      var resvd = _path.join(process.cwd(), '/static', uri);
-
-      fs.stat(resvd, function (err, stat) {
-        if (err) {
-          console.log('Error inside sanitize function.');
-          console.dir(err);
-          return callback(uri, resvd);
-        }
-
-        var isDirectory     = stat.isDirectory(),
-            // when path is '/' serves index.html
-            forceDelegation = uri.substr(-1) !== '/';
-
-        // TODO: If path is a directory, what do you serve?
-        if (isDirectory) {
-          if (forceDelegation) {
-            uri += '/';
-          } else {
-            uri += SERVE_INDEX ? 'index.html': '';
-          }
-        }
-
-        ucache[uri] = [
-          uri,
-          _path.join(process.cwd(), '/static', uri),
-          isDirectory && forceDelegation
-        ];
-
-
-        return callback.apply(this, ucache[uri]);
-      });
-    };
-
-    spdy.createServer({
-        ca: fs.readFileSync('./lib/tls/server.csr'),
-        key: fs.readFileSync('./lib/tls/server.key'),
-        cert: fs.readFileSync('./lib/tls/server.crt'),
-
-        maxStreams: 100
-    }, function (request, response) {
-      var parsed  = url.parse(request.url),
-          uri     = parsed.pathname,
-          temp    = null;
-
-      request._params = {};
-
-      // Parse and format url params.
-      if (parsed.query) {
-        parsed.query.split('&').forEach(function(param) {
-          temp = param.split('=');
-          request._params[temp[0]] =
-            decodeURIComponent(temp[1]).replace(/\+/g, ' ');
+      var cancel = function(response) {
+        response.writeHead(404, {
+            'Content-Type': 'text/html'
         });
-      }
+        return fs.createReadStream(err).pipe(response);
+      };
 
-      sanitize(uri, function(uri, fn_, forceDelegation) {
-        response._writeHead = response.writeHead;
-        response.writeHead = function (statusCode, headers) {
-          headers = headers || {};
+      var ucache = {};
+      // Checks if path exists and decides which file to serve.
+      var sanitize = function (uri, callback) {
+        if (ucache[uri]) { return callback.apply(this, ucache[uri]); }
 
-          headers.libAbsinthe = 'r' + ABSINTHE.version;
+        var resvd = _path.join(process.cwd(), '/static', uri);
 
-          return response._writeHead.apply(this, [statusCode, headers]);
-        };
+        fs.stat(resvd, function (err, stat) {
+          if (err) {
+            console.log('Error inside sanitize function.');
+            console.dir(err);
+            return callback(uri, resvd);
+          }
 
-        if (forceDelegation) {
-          response.writeHead(307, {
-              'Location': uri
-          });
-          return response.end();
-        }
+          var isDirectory     = stat.isDirectory(),
+              // when path is '/' serves index.html
+              forceDelegation = uri.substr(-1) !== '/';
 
-        // SECURITY: Cancel request if tries to access dirs
-        // outside the project dir.
-        if ( /\.\.\/\.\./.test(uri) || /\.\/\.\./.test(uri) ) {
-          return cancel(response);
-        }
-        if ( fn_.length < (process.cwd()).length ) {
-          return cancel(response);
-        }
-        if ( ~uri.indexOf('/../') ) {
-          return cancel(response);
-        }
-
-        // ROUTER
-        for (var router in controller) {
-            // Why does route have no 'var'?
-          for (var route in controller[router].paths) {
-            temp = controller[router].paths[route]; // path name
-            if ((uri.substr(0, temp.length) === temp && (uri.substr(temp.length, 1) == '/')) || uri === temp) {
-              return controller[router].handler.apply(this, [
-                request,
-                response,
-                controller[router].paths[route],
-                uri
-              ]);
+          // TODO: If path is a directory, what do you serve?
+          if (isDirectory) {
+            if (forceDelegation) {
+              uri += '/';
+            } else {
+              uri += SERVE_INDEX ? 'index.html': '';
             }
           }
+
+          ucache[uri] = [
+            uri,
+            _path.join(process.cwd(), '/static', uri),
+            isDirectory && forceDelegation
+          ];
+
+          return callback.apply(this, ucache[uri]);
+        });
+      };
+
+      spdy.createServer({
+          ca: fs.readFileSync('./lib/tls/server.csr'),
+          key: fs.readFileSync('./lib/tls/server.key'),
+          cert: fs.readFileSync('./lib/tls/server.crt'),
+
+          maxStreams: 100
+      }, function (request, response) {
+        var parsed  = url.parse(request.url),
+            uri     = parsed.pathname,
+            temp    = null;
+
+        request._params = {};
+
+        // Parse and format url params.
+        if (parsed.query) {
+          parsed.query.split('&').forEach(function(param) {
+            temp = param.split('=');
+            request._params[temp[0]] =
+              decodeURIComponent(temp[1]).replace(/\+/g, ' ');
+          });
         }
 
-        // BLACKLIST
-        rpaths = config.blacklist;
+        sanitize(uri, function(uri, fn_, forceDelegation) {
+          response._writeHead = response.writeHead;
+          response.writeHead = function (statusCode, headers) {
+            headers = headers || {};
 
-        for (var rpath in rpaths) {
-          if (uri.substr(0, rpaths[rpath].length) === rpaths[rpath]) {
-            response.writeHead(418, {
-              'Content-Type': 'text/plain'
+            headers.libAbsinthe = 'r' + ABSINTHE.version;
+
+            return response._writeHead.apply(this, [statusCode, headers]);
+          };
+
+          if (forceDelegation) {
+            response.writeHead(307, {
+                'Location': uri
             });
-            return response.end('418 I\'m a teapot\n');
+            return response.end();
           }
-        }
 
-        if (_fs[fn_] === void(0)) { _fs[fn_] = fs.existsSync(fn_); }
+          // SECURITY: Cancel request if tries to access dirs
+          // outside the project dir.
+          if ( /\.\.\/\.\./.test(uri) || /\.\/\.\./.test(uri) ) {
+            return cancel(response);
+          }
+          if ( fn_.length < (process.cwd()).length ) {
+            return cancel(response);
+          }
+          if ( ~uri.indexOf('/../') ) {
+            return cancel(response);
+          }
 
-        if (!_fs[fn_]) { return cancel(response); }
+          // ROUTER
+          for (var router in controller) {
+              // Why does route have no 'var'?
+            for (var route in controller[router].paths) {
+              temp = controller[router].paths[route]; // path name
+              if ((uri.substr(0, temp.length) === temp && (uri.substr(temp.length, 1) == '/')) || uri === temp) {
+                return controller[router].handler.apply(this, [
+                  request,
+                  response,
+                  controller[router].paths[route],
+                  uri
+                ]);
+              }
+            }
+          }
 
-        var s       = fs.createReadStream(fn_),
-            etag    = _fm['static' + uri] && _fm['static' + uri].mtime || '0',
-            ntag    = +etag;
+          // BLACKLIST
+          rpaths = config.blacklist;
+
+          for (var rpath in rpaths) {
+            if (uri.substr(0, rpaths[rpath].length) === rpaths[rpath]) {
+              response.writeHead(418, {
+                'Content-Type': 'text/plain'
+              });
+              return response.end('418 I\'m a teapot\n');
+            }
+          }
+
+          if (_fs[fn_] === void(0)) { _fs[fn_] = fs.existsSync(fn_); }
+
+          if (!_fs[fn_]) { return cancel(response); }
+
+          var s       = fs.createReadStream(fn_),
+              etag    = _fm['static' + uri] && _fm['static' + uri].mtime || '0',
+              ntag    = +etag;
 
 
-        if (request.headers['if-none-match'] === ntag) {
-          return response.end(response.writeHead(304, {
-            'Date': etag.toString(),
-            'Etag': ntag,
-            'Cache-Control': 'max-age=86400, public',
-            'Content-type': 'image/jpeg',
-            'Keep-Alive': 'timeout=6, max=32',
-            'Connection': 'keep-alive'
-          }));
-        }
+          if (request.headers['if-none-match'] === ntag) {
+            return response.end(response.writeHead(304, {
+              'Date': etag.toString(),
+              'Etag': ntag,
+              'Cache-Control': 'max-age=86400, public',
+              'Content-type': 'image/jpeg',
+              'Keep-Alive': 'timeout=6, max=32',
+              'Connection': 'keep-alive'
+            }));
+          }
 
-        var aE        = request.headers['accept-encoding'] || '',
-            _resHead  = {
-              'Content-Type': mime.lookup(fn_),
-              'Cache-control': 'max-age=604800',
-              'Expire': new Date().toString(),
-              'Etag': ntag
-            };
+          var aE        = request.headers['accept-encoding'] || '',
+              _resHead  = {
+                'Content-Type': mime.lookup(fn_),
+                'Cache-control': 'max-age=604800',
+                'Expire': new Date().toString(),
+                'Etag': ntag
+              };
 
-        var compress = function(name, obj, cache) {
-          _resHead['Content-Encoding'] = name;
-          response.writeHead(200, _resHead);
+          var compress = function(name, obj, cache) {
+            _resHead['Content-Encoding'] = name;
+            response.writeHead(200, _resHead);
 
-          if (cache[fn_]) {
+            if (cache[fn_]) {
+              return cache[fn_].pipe(response);
+            }
+
+            cache[fn_] = new MemCache();
+            s.pipe(obj).pipe(cache[fn_]);
             return cache[fn_].pipe(response);
+          };
+
+          if (~aE.indexOf('deflate')) {
+            return compress('deflate', zlib.createDeflate(), _fs_cache_deflate);
+
+          } else if (~aE.indexOf('gzip')) {
+            return compress('gzip', zlib.createGzip(), _fs_cache_gzip);
+
+          } else {
+            response.writeHead(200, _resHead);
+            return s.pipe(response);
           }
 
-          cache[fn_] = new MemCache();
-          s.pipe(obj).pipe(cache[fn_]);
-          return cache[fn_].pipe(response);
-        };
+        });
+      }).listen(DEFAULT_PORT);
 
-        if (~aE.indexOf('deflate')) {
-          return compress('deflate', zlib.createDeflate(), _fs_cache_deflate);
+      http.createServer(function (request, response) {
+        if (!request.headers.host) { response.end(); }
 
-        } else if (~aE.indexOf('gzip')) {
-          return compress('gzip', zlib.createGzip(), _fs_cache_gzip);
+        return response.writeHead(302, {
+                'Location': 'https://sly.mn' + request.url
+        }), response.end();
+      }).listen(HTTP_DEFAULT_P);
 
-        } else {
-          response.writeHead(200, _resHead);
-          return s.pipe(response);
-        }
-
-      });
-    }).listen(DEFAULT_PORT);
-
-    http.createServer(function (request, response) {
-      if (!request.headers.host) { response.end(); }
-
-      return response.writeHead(302, {
-              'Location': 'https://sly.mn' + request.url
-      }), response.end();
-    }).listen(HTTP_DEFAULT_P);
-
-    console.log('[' + process.pid + '] Ready.');
-  });
+      console.log('[' + process.pid + '] Ready.');
+    }
+  );
 };
 
 if (!cluster.isMaster) {
