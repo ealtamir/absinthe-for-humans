@@ -57,19 +57,12 @@ GLOBAL.doCluster = false;
 //
 GLOBAL.SERVE_INDEX = false;
 
-var helpers = require("./helpers");
-var _hr_mutate = helpers._hr_mutate;
+var  helpers    = require("./helpers");
+var  _hr_mutate = helpers._hr_mutate;
+var  cluster    = require('cluster');
 
-var cluster = require('cluster');
-var numCPUs = doCluster ? require('os').cpus().length : 1;
 
 var worker = function() {
-  // General purpose variable.
-  var temp  = null;
-  var _c_   = null;
-  var _c    = null;
-
-  // Used to substitute normal require if using V8
   var _require = null;
 
   // Constants
@@ -78,8 +71,6 @@ var worker = function() {
       return '1';
     }
   };
-  var DEFAULT_PORT    = 8080;
-  var HTTP_DEFAULT_P  = 8081;
 
   // Loads many variables to the global environment
   require('./server_init').server_init();
@@ -92,13 +83,6 @@ var worker = function() {
   var MemCache = require('./custom_memcache').MemCache(_stream);
 
   var err = _path.join(__dirname, config.path404);
-
-  var cancel = function(response) {
-    response.writeHead(404, {
-        'Content-Type': 'text/html'
-    });
-    return fs.createReadStream(err).pipe(response);
-  };
 
   var _fs_cache = {};
 
@@ -175,7 +159,7 @@ var worker = function() {
         });
       }
     };
-  }
+  };
 
   readDir = function(start, ctype, callback) {
     var found = {
@@ -216,18 +200,18 @@ var worker = function() {
 
   // SECURITY: Cancel request if it tries to access dirs
   // outside the project dir.
-  var doSecurityCheck = function(fn_, uri) {
+  var doSecurityCheck = function(staticFileName, uri) {
     if ( /\.\.\/\.\./.test(uri) || /\.\/\.\./.test(uri) ) {
       return false;
     }
-    if ( fn_.length < (process.cwd()).length ) {
+    if ( staticFileName.length < (process.cwd()).length ) {
       return false;
     }
     if ( ~uri.indexOf('/../') ) {
       return false;
     }
     return true;
-  }
+  };
 
   var readDictionary = function(start, ctype, readDir, callback) {
     // Callback gets status, files found and number of files.
@@ -281,6 +265,7 @@ var worker = function() {
   };
 
   var delegateToController = function(uri, controller, request, response) {
+    var temp = null;
     for (var router in controller) {
       for (var route in controller[router].paths) {
         temp = controller[router].paths[route]; // path name
@@ -312,9 +297,9 @@ var worker = function() {
     return false;
   };
 
-  var serveFromCacheOrCrompress = function(request, response) {
-    var s    = fs.createReadStream(fn_);
-    var etag = _fm['static' + uri] && _fm['static' + uri].mtime || '0';
+  var serveFromCacheOrCrompress = function(request, response, staticFileName, fileStatsLog) {
+    var s    = fs.createReadStream(staticFileName);
+    var etag = fileStatsLog['static' + uri] && fileStatsLog['static' + uri].mtime || '0';
     var ntag = +etag;
 
     if (request.headers['if-none-match'] === ntag) {
@@ -330,7 +315,7 @@ var worker = function() {
 
     var aE = request.headers['accept-encoding'] || '';
     var _resHead  = {
-      'Content-Type': mime.lookup(fn_),
+      'Content-Type': mime.lookup(staticFileName),
       'Cache-control': 'max-age=604800',
       'Expire': new Date().toString(),
       'Etag': ntag
@@ -340,13 +325,13 @@ var worker = function() {
       _resHead['Content-Encoding'] = name;
       response.writeHead(200, _resHead);
 
-      if (cache[fn_]) {
-        return cache[fn_].pipe(response);
+      if (cache[staticFileName]) {
+        return cache[staticFileName].pipe(response);
       }
 
-      cache[fn_] = new MemCache();
-      s.pipe(obj).pipe(cache[fn_]);
-      return cache[fn_].pipe(response);
+      cache[staticFileName] = new MemCache();
+      s.pipe(obj).pipe(cache[staticFileName]);
+      return cache[staticFileName].pipe(response);
     };
 
     if (~aE.indexOf('deflate')) {
@@ -369,19 +354,39 @@ var worker = function() {
   //      decodeURIComponent(temp[1]).replace(/\+/g, ' ');
   //  });
   //}
+  //
+  var startServers = function(callback) {
+    spdy.createServer({
+        ca: fs.readFileSync('./lib/tls/server.csr'),
+        key: fs.readFileSync('./lib/tls/server.key'),
+        cert: fs.readFileSync('./lib/tls/server.crt'),
+      },
+      callback
+    ).listen(config.default_port);
 
-  var test2 = function (_fm) {
-    var  _fs               = {};
-    var  _fs_cache_deflate = {};
-    var  _fs_cache_gzip    = {};
-    var  ucache            = {};
+    http.createServer(function (request, response) {
+      if (!request.headers.host) {
+        response.end();
+      }
 
-    var hello = function (request, response) {
+      return response.writeHead(302, {
+              'Location': 'https://sly.mn' + request.url
+      }), response.end();
+    }).listen(config.http_default_p);
+  };
+
+  var processReadDirs = function(fileStatsLog) {
+    var filesLog          = {};
+    var _fs_cache_deflate = {};
+    var _fs_cache_gzip    = {};
+    var ucache            = {};
+
+    var requestHandler = function(request, response) {
       var parsed  = url.parse(request.url);
       var uri     = parsed.pathname;
       var temp    = null;
 
-      sanitize(uri, ucache, function(uri, fn_, forceDelegation) {
+      sanitize(uri, ucache, function(uri, staticFileName, forceDelegation) {
         response._writeHead = response.writeHead;
 
         response.writeHead = function (statusCode, headers) {
@@ -399,7 +404,7 @@ var worker = function() {
           return response.end();
         }
 
-        if (doSecurityCheck(fn_, uri) !== true) {
+        if (doSecurityCheck(staticFileName, uri) !== true) {
           return cancel(response);
         }
 
@@ -409,85 +414,34 @@ var worker = function() {
           return temp
         }
 
+        // Check Blacklist
         temp = checkBlacklist(uri, response);
         if (temp !== false) {
           return temp
         }
 
-        if (_fs[fn_] === void(0)) {
-          _fs[fn_] = fs.existsSync(fn_);
+        if (filesLog[staticFileName] === void(0)) {
+          filesLog[staticFileName] = fs.existsSync(staticFileName);
         }
 
-        if (!_fs[fn_]) {
+        if (!filesLog[staticFileName]) {
           return cancel(response);
         }
 
-        return serveFromCacheOrCrompress(request, response);
+        return serveFromCacheOrCrompress(request, response, staticFileName, fileStatsLog);
       });
     };
 
-    spdy.createServer({
-        ca: fs.readFileSync('./lib/tls/server.csr'),
-        key: fs.readFileSync('./lib/tls/server.key'),
-        cert: fs.readFileSync('./lib/tls/server.crt'),
-      }, hello
-    ).listen(DEFAULT_PORT);
-
-    http.createServer(function (request, response) {
-      if (!request.headers.host) { response.end(); }
-
-      return response.writeHead(302, {
-              'Location': 'https://sly.mn' + request.url
-      }), response.end();
-    }).listen(HTTP_DEFAULT_P);
+    startServers(requestHandler);
 
     console.log('[' + process.pid + '] Ready.');
   };
 
-  readDictionary('./static', 2, readDir, test2);
-
+  readDictionary('./static', 2, readDir, processReadDirs);
 };
 
 if (!cluster.isMaster) {
   worker();
 } else {
-  var init = process.hrtime(), vlist = {};
-
-  console.log('Spawning..');
-
-  for (var i = 0; i < numCPUs; i += 1) {
-    cluster.fork();
-  }
-
-  cluster.on('online', function(worker) {
-    'use strict';
-    console.log('\t[' + worker.process.pid +
-                '] Worker online. [' + _hr_mutate(init) + ']');
-
-    vlist[worker.process.pid] = true;
-  });
-
-  cluster.on('disconnect', function(worker) {
-    'use strict';
-    if (!vlist[worker.process.pid]) { return false; }
-
-    console.log('\t[' + worker.process.pid + '] Worker disconnected.');
-    console.log('\tRespawning..');
-    cluster.fork();
-
-    delete vlist[worker.process.pid];
-  });
-
-  cluster.on('exit', function(worker, code, signal) {
-    'use strict';
-    if (!vlist[worker.process.pid]) { return false; }
-
-    var exitCode = worker.process.exitCode;
-    console.log('\t[' + worker.process.pid +
-                '] Worker died. (' + exitCode + ')');
-    console.log('\tRespawning..');
-    cluster.fork();
-
-    delete vlist[worker.process.pid];
-  });
+  require('./cluster').init_cluster();
 }

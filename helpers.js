@@ -65,6 +65,13 @@ var printLoadedLogics = function(logic_obj) {
   }
 };
 
+var cancel = function(response) {
+  response.writeHead(404, {
+      'Content-Type': 'text/html'
+  });
+  return fs.createReadStream(err).pipe(response);
+};
+
 
 exports._hr_mutate = _hr_mutate;
 
@@ -78,3 +85,4 @@ exports.loadControllerModules = function(controllers) {
   printLoadedControllers(controllers);
 };
 
+exports.cancel = cancel;
