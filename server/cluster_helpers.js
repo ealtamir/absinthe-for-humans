@@ -1,10 +1,14 @@
 var cluster = require('cluster');
+var helpers = require('../helpers');
+var config  = require('../lib/config').config;
 
+var init_cluster = function() {
 
-exports.init_cluster = function() {
-  var _hr_mutate = require('./helpers')._hr_mutate;
-  var init = process.hrtime(), vlist = {};
-  var numCPUs = config.doCluster ? require('os').cpus().length : 1;
+  var _hr_mutate = helpers._hr_mutate;
+  var init       = process.hrtime();
+  var vlist      = {};
+  var numCPUs    = config.doCluster?
+    require('os').cpus().length : 1;
 
   console.log('Spawning..');
 
@@ -15,7 +19,7 @@ exports.init_cluster = function() {
   cluster.on('online', function(worker) {
     'use strict';
     console.log('\t[' + worker.process.pid +
-                '] Worker online. [' + _hr_mutate(init) + ']');
+      '] Worker online. [' + _hr_mutate(init) + ']');
 
     vlist[worker.process.pid] = true;
   });
@@ -37,10 +41,18 @@ exports.init_cluster = function() {
 
     var exitCode = worker.process.exitCode;
     console.log('\t[' + worker.process.pid +
-                '] Worker died. (' + exitCode + ')');
+      '] Worker died. (' + exitCode + ')');
     console.log('\tRespawning..');
     cluster.fork();
 
     delete vlist[worker.process.pid];
   });
-}
+};
+
+exports.init = function(worker) {
+  if (!cluster.isMaster) {
+    worker();
+  } else {
+    init_cluster();
+  }
+};

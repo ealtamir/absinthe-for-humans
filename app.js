@@ -33,23 +33,26 @@
         CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
         SOFTWARE.
 */
-var helpers    = require("./helpers");
+
+global._stream  = require('stream').Stream;
+
+global.controller = {};
+global.logic      = {};
+
+var helpers    = require('./helpers');
 var _hr_mutate = helpers._hr_mutate;
 
-var  cluster_helpers = require('./cluster_helpers');
-var  config          = require('./lib/config').config;
+var cluster_helpers = require('./server/cluster_helpers');
+var config          = require('./lib/config').config;
 
 var worker = function() {
-  var server = require('./server');
-  var init   = require('./server_init');
 
-  GLOBAL._stream  = require('stream').Stream;
-  GLOBAL._require = require;
-  GLOBAL.require  = init.loadBetterRequire();
+  var server = require('./server/server');
+  var init   = require('./server/server_init');
 
   init.importGlobalModules(require); // Call this first
-  init.checkIfV8(GLOBAL.v8);
-  init.loadControllersAndLogics();
+  init.checkIfV8(global.v8);
+  init.loadControllersAndLogics(controller, logic);
   init.changeFSReadStream();
 
   // Custom stream implementations

@@ -1,5 +1,5 @@
-var MemCache = require('./custom_memcache').MemCache;
-var helpers  = require('./helpers');
+var MemCache = require('../server/custom_memcache').MemCache;
+var helpers  = require('../helpers');
 var cancel   = helpers.cancel;
 
 var addInfo = function(ctype, stash, dict, path, stat) {

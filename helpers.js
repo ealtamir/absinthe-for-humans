@@ -15,7 +15,6 @@ var _hr_mutate = function(init) {
       ' ' + ~~micro + 'µs' + ' ' + ~~nano + 'ns';
 };
 
-
 var extension_loaders = function(type, obj) {
   var temp = null;
   var temp_func = function(file) {
@@ -24,6 +23,7 @@ var extension_loaders = function(type, obj) {
       obj[temp[0]] = require('./' + type + '/' + file);
     }
   };
+
   require('fs').readdirSync('./' + type).forEach(temp_func);
 };
 
@@ -74,17 +74,14 @@ var cancel = function(response) {
   return fs.createReadStream(err).pipe(response);
 };
 
-
 exports._hr_mutate = _hr_mutate;
+exports.cancel     = cancel;
 
 exports.loadLogicModules = function(logics) {
   extension_loaders('logic', logics);
   printLoadedLogics(logics);
 };
-
 exports.loadControllerModules = function(controllers) {
   extension_loaders('controller', controllers);
   printLoadedControllers(controllers);
 };
-
-exports.cancel = cancel;

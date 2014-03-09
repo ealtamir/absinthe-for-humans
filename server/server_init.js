@@ -1,4 +1,4 @@
-var helpers = require('./helpers');
+var helpers = require('../helpers');
 
 var importGlobalModules = function(require) {
   var imports = [
@@ -36,49 +36,11 @@ var checkIfV8 = function(v8) {
   }
 };
 
-var loadControllersAndLogics = function() {
-  GLOBAL.controller = {};
+var loadControllersAndLogics = function(controller, logic) {
   helpers.loadControllerModules(controller);
-
-  // Load logical modules
-  GLOBAL.logic = {};
   helpers.loadLogicModules(logic);
 };
 
-var loadBetterRequire = function() {
-  var temp  = null;
-  var _c_   = null;
-  var _c    = null;
-
-  if (GLOBAL._require === void(0)) {
-    GLOBAL._require = require;
-  }
-
-  // Refer to https://gist.github.com/KenanSulayman/5281658.
-  return function(k) {
-    try {
-      return _require(k);
-    } catch (e) {
-      if (v8) {
-        _ = e.stack.split('\n'); // TODO: It is not clear what e.stack is.
-        __ = '';
-        for (var a in _) {
-          if (_.hasOwnProperty(a)) {
-            temp = _[a].match(/\(([^)]+)\)/g);
-            if (temp !== null) {
-              __ += (new Array(+a + 1)).join(' ') + '=> ' + temp + '\n';
-            }
-          }
-        }
-        console.log(_[0], '[' + k + ']\n', __);
-        process.exit();
-      } else {
-        console.trace('=== FATAL ERROR: \'' + k + '\' ===');
-        process.exit();
-      }
-    }
-  };
-};
 
 var changeFSReadStream = (function() {
   var _fs_cache = {};
@@ -113,6 +75,5 @@ var changeFSReadStream = (function() {
 
 exports.importGlobalModules       =  importGlobalModules;
 exports.changeFSReadStream        =  changeFSReadStream;
-exports.loadBetterRequire         =  loadBetterRequire;
 exports.loadControllersAndLogics  =  loadControllersAndLogics;
 exports.checkIfV8                 =  checkIfV8;
