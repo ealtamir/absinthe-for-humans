@@ -1,24 +1,6 @@
 var helpers = require('./helpers');
 
-exports.server_init = function init() {
-
-  GLOBAL._require = GLOBAL.require;
-  GLOBAL.require = loadBetterRequire();
-
-  // Configuration
-  GLOBAL.config = require('./lib/config').config;
-
-
-  importGlobalModules();
-
-  // Check if using V8 engine
-  checkV8();
-
-  loadControllersAndLogics();
-
-}
-
-var importGlobalModules = function() {
+var importGlobalModules = function(require) {
   var imports = [
       'child_process'
     , 'path'
@@ -43,14 +25,14 @@ var importGlobalModules = function() {
   });
 };
 
-var checkV8 = function() {
+var checkIfV8 = function(v8) {
   try {
     delete e;
     e;
   } catch(e) {
-    GLOBAL.v8 = e.stack != void(0);
+    v8 = e.stack !== void(0);
   } finally {
-    GLOBAL.v8 = GLOBAL.v8 || 0;
+    v8 = v8 || 0;
   }
 };
 
@@ -96,4 +78,41 @@ var loadBetterRequire = function() {
       }
     }
   };
-}
+};
+
+var changeFSReadStream = (function() {
+  var _fs_cache = {};
+
+  return function() {
+    fs._createReadStream = fs.createReadStream;
+
+    fs.createReadStream = function(path, options) {
+      options = options || {};
+
+      // whereas path is fd_ref && options is typeof object
+      // __ if path, options do not statisfy (String path, Object options)
+      // forward to base implementation.
+      if (typeof path === 'string' &&
+          typeof options === 'object' &&
+          Object.keys(options).length > 0) {
+        return fs._createReadStream.apply(this, arguments);
+      }
+
+      if (_fs_cache[path]) {
+        return _fs_cache[path];
+      }
+
+      _fs_cache[path] = new MemCache();
+
+      // Sends contents of file at 'path' to a buffer
+      fs._createReadStream(path, options).pipe(_fs_cache[path]);
+      return _fs_cache[path];
+    };
+  };
+})();
+
+exports.importGlobalModules       =  importGlobalModules;
+exports.changeFSReadStream        =  changeFSReadStream;
+exports.loadBetterRequire         =  loadBetterRequire;
+exports.loadControllersAndLogics  =  loadControllersAndLogics;
+exports.checkIfV8                 =  checkIfV8;

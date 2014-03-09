@@ -1,3 +1,5 @@
+var config = require('./lib/config').config;
+
 var _hr_mutate = function(init) {
   'use strict';
   init = process.hrtime(init); // [seconds, nanoseconds]
@@ -31,7 +33,7 @@ var printLoadedControllers = function(cont_obj) {
   var _c_   = null;
   var _c    = null;
 
-  if (!doCluster) {
+  if (!config.doCluster) {
     _c_ = [];
     for (_c in cont_obj) {
       if (cont_obj.hasOwnProperty(_c)) {
@@ -52,7 +54,7 @@ var printLoadedLogics = function(logic_obj) {
   var _c_   = null;
   var _c    = null;
 
-  if (!doCluster) {
+  if (!config.doCluster) {
     _c_ = [];
     for (_c in logic_obj) {
       if (logic_obj.hasOwnProperty(_c)) {
